@@ -1,0 +1,22 @@
+{
+  "name": "nekretnine-osijek-monitor",
+  "version": "1.0.0",
+  "description": "Scrapes Croatian real estate sites for Osijek listings, deduplicates, and sends Telegram notifications",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "scrape": "node src/index.js --run-now",
+    "test": "node src/test.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "node-cron": "^3.0.3",
+    "better-sqlite3": "^11.0.0",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
