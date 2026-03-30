@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'].forEach(k => { if (!process.env[k]) throw new Error(`Missing required env var: ${k}`); });
+
 export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
