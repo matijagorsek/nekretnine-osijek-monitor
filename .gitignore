@@ -18,3 +18,7 @@ venv/
 # OS
 .DS_Store
 *.log
+
+# Core dumps
+core
+core.*
