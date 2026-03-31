@@ -12,6 +12,10 @@ import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
 
+['TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'].forEach(k => {
+  if (!process.env[k]) throw new Error(`Missing required env var: ${k}`);
+});
+
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
   { name: "Index", module: indexOglasi },
