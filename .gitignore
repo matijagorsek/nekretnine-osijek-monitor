@@ -3,3 +3,7 @@ core.*
 node_modules/
 *.log
 data/
+
+# Core dumps
+core
+core.*
