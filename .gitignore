@@ -1,4 +1,5 @@
 .env
+core
 core.*
 node_modules/
 *.log

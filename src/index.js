@@ -2,7 +2,7 @@ import 'dotenv/config';
 const REQUIRED = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
 const missing = REQUIRED.filter(k => !process.env[k]);
 if (missing.length) {
-  console.error(`FATAL: missing required env vars: ${missing.join(', ')}`);
+  console.error(`FATAL: missing required env vars: ${missing.join(', ')} — copy .env.example to .env and fill in values`);
   process.exit(1);
 }
 
