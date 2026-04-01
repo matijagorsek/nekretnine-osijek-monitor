@@ -1,3 +1,11 @@
+import 'dotenv/config';
+const REQUIRED = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
+const missing = REQUIRED.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error(`FATAL: missing required env vars: ${missing.join(', ')}`);
+  process.exit(1);
+}
+
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
@@ -11,10 +19,6 @@ import * as njuskalo from "./scrapers/njuskalo.js";
 import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
-
-['TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'].forEach(k => {
-  if (!process.env[k]) throw new Error(`Missing required env var: ${k}`);
-});
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
