@@ -6,7 +6,7 @@ const API_BASE = `https://api.telegram.org/bot${config.telegram.botToken}`;
 /**
  * Send a single Telegram message (Markdown V2)
  */
-async function sendMessage(text, parseMode = "HTML") {
+export async function sendMessage(text, parseMode = "HTML") {
   try {
     const resp = await fetch(`${API_BASE}/sendMessage`, {
       method: "POST",

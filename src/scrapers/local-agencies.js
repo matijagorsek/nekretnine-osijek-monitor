@@ -49,6 +49,7 @@ const AGENCIES = [
 
 export async function scrape(filterType = "all") {
   const results = [];
+  let totalContainerCount = 0;
 
   for (const agency of AGENCIES) {
     try {
@@ -60,8 +61,9 @@ export async function scrape(filterType = "all") {
         continue;
       }
 
-      const listings = parseGenericListings(html, agency);
+      const { listings, containerCount } = parseGenericListings(html, agency);
       results.push(...listings);
+      totalContainerCount += containerCount;
       console.log(`[local:${agency.name}] Found ${listings.length} listings`);
 
       await politeSleep(2000, 5000); // Extra polite with local agencies
@@ -70,7 +72,7 @@ export async function scrape(filterType = "all") {
     }
   }
 
-  return results;
+  return { listings: results, containerCount: totalContainerCount };
 }
 
 function parseGenericListings(html, agency) {
@@ -78,7 +80,9 @@ function parseGenericListings(html, agency) {
   const listings = [];
   const { selectors, name: agencyName } = agency;
 
-  $(selectors.item).each((_, el) => {
+  const containers = $(selectors.item);
+  const containerCount = containers.length;
+  containers.each((_, el) => {
     try {
       const $el = $(el);
 
@@ -123,7 +127,7 @@ function parseGenericListings(html, agency) {
     }
   });
 
-  return listings;
+  return { listings, containerCount };
 }
 
 function parsePrice(text) {
