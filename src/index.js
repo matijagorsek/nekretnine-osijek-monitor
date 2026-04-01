@@ -12,7 +12,7 @@ import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters } from "./filters.js";
-import { notifyNewListings, sendTestMessage } from "./telegram.js";
+import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -39,10 +39,15 @@ async function runPipeline() {
   for (const scraper of SCRAPERS) {
     try {
       console.log(`\n📡 Scraping: ${scraper.name}...`);
-      const listings = await scraper.module.scrape(config.filters.type);
+      const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
+      if (listings.length === 0 && containerCount === 0) {
+        await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
+        console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
+      }
       allListings.push(...listings);
     } catch (err) {
       console.error(`❌ ${scraper.name} error:`, err.message);
+      await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
     }
   }
 
