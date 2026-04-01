@@ -1,24 +1,5 @@
-# Claude internal
-CLAUDE.md
-**/CLAUDE.md
-.claude/
-
-# Secrets
 .env
-.env.*
-!.env.example
-
-# Node / Python
-node_modules/
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-
-# OS
-.DS_Store
-*.log
-
-# Core dumps
-core
 core.*
+node_modules/
+*.log
+data/
