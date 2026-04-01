@@ -11,6 +11,7 @@ const SEARCH_URLS = {
 
 export async function scrape(filterType = "all") {
   const results = [];
+  let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
 
   for (const type of types) {
@@ -24,14 +25,15 @@ export async function scrape(filterType = "all") {
       continue;
     }
 
-    const listings = parseListings(html, type);
+    const { listings, containerCount } = parseListings(html, type);
     results.push(...listings);
+    totalContainerCount += containerCount;
     console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
 
     await politeSleep();
   }
 
-  return results;
+  return { listings: results, containerCount: totalContainerCount };
 }
 
 function parseListings(html, type) {
@@ -39,7 +41,9 @@ function parseListings(html, type) {
   const listings = [];
 
   // Njuškalo uses EntityList items
-  $(".EntityList--Regular .EntityList-item--Regular, .EntityList-item--VauVau, .EntityList-item--Featured").each(
+  const containers = $(".EntityList--Regular .EntityList-item--Regular, .EntityList-item--VauVau, .EntityList-item--Featured");
+  const containerCount = containers.length;
+  containers.each(
     (_, el) => {
       try {
         const $el = $(el);
@@ -84,7 +88,7 @@ function parseListings(html, type) {
     }
   );
 
-  return listings;
+  return { listings, containerCount };
 }
 
 function parsePrice(text) {
