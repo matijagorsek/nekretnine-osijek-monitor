@@ -9,16 +9,18 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
 ### ✅ Apply these patterns
 - **Environment variables for all runtime configuration** (this project)
   → Add a startup validation step in every entrypoint that asserts required env vars are present and well-formed before the process accepts traffic.
-- **Environment variables for runtime configuration** (this project)
-  → Reinforce with a startup validation layer that asserts required env vars are present and well-formed before the process accepts any traffic.
+- **Environment variables for all runtime configuration** (this project)
+  → Pair this pattern with startup validation (fail-fast on missing required vars) and .env.example committed to every repo
 - **Projects are monitoring or notification systems** (this project)
   → Extract a shared poller/notifier scaffold with built-in run-metrics logging, structured error handling, and a consistent retry/backoff interface
 - **Webhook and event-driven external integrations** (this project)
-  → Centralise webhook ingestion behind a verified-signature middleware so every consumer inherits HMAC validation by default rather than opting in.
+  → Always validate webhook signatures server-side before processing payloads; never fail-open when the secret is absent
 - **Telegram as primary notification channel** (this project)
   → Extract a shared Telegram utility module with retry logic, error handling, and send-failure logging to avoid duplicating fragile send code in every project.
 - **Telegram as primary notification channel** (this project)
-  → Extract a shared Telegram notifier module with retry logic, error surfacing, and structured message formatting to avoid silent failures across all consumers.
+  → Centralise Telegram bot logic into a shared library to avoid duplicating token handling, error-swallowing, and rate-limit logic across projects
+- **Monitoring and notification systems dominate portfolio** (this project)
+  → Extract shared scaffolding (scheduler, notifier, health-check endpoint, .gitignore template) into a portfolio-wide starter template to avoid reinventing the same gaps in every new project
 - **Monitoring & notification systems dominate the portfolio** (this project)
   → Extract a shared notification/alerting library to avoid duplicating Telegram, webhook, and polling logic across projects.
 - **Environment variables for runtime configuration** (this project)
@@ -27,8 +29,6 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Define a shared contract (source → diff → notify) and reuse it; this pattern is frequent enough to warrant a small internal framework rather than bespoke implementations
 - **Monitoring and alerting as primary use case** (this project)
   → Extract a shared monitoring harness (run-loop, error reporting, Telegram dispatch, metrics emission) to eliminate the duplicated scaffolding that currently drifts inconsistently across these projects
-- **Monitoring and alerting as primary use case** (this project)
-  → Define a shared monitoring project template with built-in .gitignore, env-var validation at startup, structured logging, and a CI gate — reuse across all monitoring projects rather than re-inventing per project
 - **Monitoring and alerting as primary use case** (this project)
   → Standardise a shared monitor scaffold (fetch → validate → diff → notify → persist run-metadata) to reduce per-project reinvention and ensure consistent error propagation.
 - **Monitoring / notification as primary use case** (this project)
@@ -47,14 +47,14 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Enforce a 'commit or stash before context switch' rule. WIP commits on a fix branch are better than 160 dirty files. Consider a pre-switch hook that blocks checkout unless the tree is clean.
 - **Critical security findings survive 9–17 cycles without remediation** (5 projects)
   → Decouple finding documentation from remediation tracking. Each critical finding needs an owner, a target commit date, and a CI gate that blocks deployment if the finding is still open. Documentation without a merge blocker is not a control.
-- **Zero test infrastructure across the portfolio** (seen here)
-  → Add a minimal test harness (Jest/pytest) and wire it to a pre-commit hook or CI job. Even 3–5 unit tests on auth and critical-path logic would catch the class of bugs currently repeating across cycles.
+- **Zero or broken test infrastructure — no CI gate** (seen here)
+  → Add at least one integration test and wire npm test / pytest to a CI pipeline; a broken test script is worse than no script because it creates false confidence
 - **Sensitive endpoints with no authentication** (4 projects)
   → Apply an auth middleware by default on every route; opt-out explicitly for genuinely public endpoints; never enforce access control only on the client
 - **Errors silently swallowed or masked by catch-all handlers** (seen here)
   → Replace bare catch blocks with typed error handling that logs context and re-raises or alerts. Remove global continue-handlers; let the process crash and restart cleanly under a supervisor.
-- **Fix branches created but never committed or merged** (seen here)
-  → Enforce a branch hygiene rule: any fix branch with dirty files and no new commits within 48h is automatically flagged. Commit partial fixes as WIP commits rather than leaving them unstaged — something is always better than nothing on disk.
+- **Fix branches created but never completed** (seen here)
+  → Treat an open branch with zero commits as a red flag equivalent to the finding itself; close stale fix branches rather than leaving them as false-progress signals
 - **Public endpoints with zero authentication** (4 projects)
   → Every externally reachable endpoint must authenticate callers before executing any logic. For Telegram bots: whitelist chat IDs. For HTTP APIs: require and validate API keys or tokens server-side, never client-side
 - **Core dump binaries accumulating with no .gitignore** (seen here)
@@ -65,6 +65,12 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Add 'core.*' and 'core.[0-9]*' to a root .gitignore immediately. Investigate why Node/JVM processes are crashing to produce dumps rather than exiting cleanly — the dumps are a symptom.
 - **Zero test infrastructure on security-critical paths** (seen here)
   → Add at minimum one integration test per security-critical path (auth, webhook validation, API key check) and wire them to a pre-push hook. A single failing test caught before push is worth more than twelve cycles of findings.
+- **Credentials committed to git history** (seen here)
+  → Rotate all exposed credentials immediately; use git-filter-repo to purge history; add pre-commit hooks (gitleaks or similar) to block future credential commits
+- **No startup env-var validation — silent runtime failures** (seen here)
+  → Add a validateEnv() function called synchronously at process startup that throws with a clear message listing every missing required variable
+- **No .gitignore — core dumps and secrets at commit risk** (seen here)
+  → Add a .gitignore as the very first commit in every new project; include core, *.env, node_modules, __pycache__, *.pyc, .gradle, build/
 - **Security and architectural debt recurring across review cycles** (6 projects)
   → Enforce a rule: any finding marked high/critical that is unresolved after two cycles blocks all feature work on that project until closed
 - **Persistent dirty working tree — fixes never committed** (7 projects)
@@ -81,8 +87,10 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Treat any finding that survives 3 cycles as a process failure. Create a time-boxed fix issue, assign it, and block new features in that project until it is closed.
 - **Critical security findings persist unresolved for 10+ cycles** (7 projects)
   → Treat any finding that survives 3 cycles as a process failure, not a code issue. Block the next feature commit until the finding has a verified-closed state. Automate a pre-push check that fails if a known-open critical finding exists.
-- **Credentials and secrets committed to git history** (seen here)
-  → Rotate every exposed credential immediately. Run `git filter-repo --path <file> --invert-paths` to purge history, then force-push. Add the leaked file patterns to .gitignore before the next commit.
+- **Auth absent or enforced client-side only** (5 projects)
+  → Enforce all role and identity checks in server-side middleware before the request reaches any handler; never trust client-supplied role claims
+- **Same findings persist across 10+ consecutive cycles** (6 projects)
+  → Block new feature work until findings older than 3 cycles are resolved; treat cycle-count as a severity multiplier when prioritising the backlog
 - **Errors silently swallowed rather than surfaced** (4 projects)
   → Establish an error-handling contract: every caught exception must either be re-thrown, logged with sufficient context to diagnose, or trigger a notification. Silent catch blocks should fail CI review.
 - **Critical issues unresolved across multiple review cycles** (4 projects)
@@ -111,12 +119,12 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Validate all required env vars at process startup and throw an explicit error with the missing key name before any I/O occurs.
 - **Missing or unenforced authentication on public-facing endpoints** (4 projects)
   → Move all auth checks server-side. Fail closed: if GITHUB_WEBHOOK_SECRET or BOT_TOKEN is unset, refuse to start rather than silently accepting all requests. Use middleware so auth cannot be accidentally omitted on new routes.
-- **No startup env-var validation — silent undefined at runtime** (seen here)
-  → Add an eager validation block at process start (before any listener is registered) that asserts all required env vars are non-empty and throws with a human-readable list of what is missing.
 - **No startup validation of required environment variables** (seen here)
   → Add an `assertEnv(vars: string[])` call as the very first line of each entrypoint. Throw and exit(1) immediately on any missing or malformed value before any server/listener is started.
 - **Fix branches stall indefinitely with growing dirty file counts** (5 projects)
   → Enforce a WIP commit policy: commit to a fix branch at the end of every session, even as a draft. Use `git stash` as a last resort before any branch switch. Treat uncommitted fix work as lost work.
+- **Core dump files accumulating untracked in repo roots** (4 projects)
+  → Add core and core.* to .gitignore immediately; configure NODE_OPTIONS=--max-old-space-size and catch uncaughtException to log-then-exit cleanly rather than dumping
 - **No .env.example — environment requirements undocumented** (4 projects)
   → Add .env.example listing every required and optional variable with a description and safe placeholder value. Automate a startup check that errors on missing required vars with a clear message referencing .env.example.
 - **Fix branches created but never committed** (3 projects)
@@ -127,6 +135,10 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Set a hard lint rule (max-lines-per-function: 100–150) and enforce it in CI. When a function exceeds the limit, decompose before adding more logic.
 - **Non-constant-time secret comparison enables timing attacks** (2 projects)
   → Replace all secret/token comparisons with `hmac.compare_digest()` (Python) or `crypto.timingSafeEqual()` (Node). Never use `==` or `===` for secrets.
+- **No shared constants or type package — enum drift guaranteed** (3 projects)
+  → Create a /shared or /packages/constants workspace package; import enums and role strings from one place in both server and client code
+- **package-lock.json uncommitted — non-reproducible builds** (seen here)
+  → Commit package-lock.json on the same commit as package.json changes; add a CI step that fails if the lock file is out of sync with the manifest
 - **Authorization enforced on the client only** (2 projects)
   → Move every authorization check to the server. The client UI is cosmetic; any route that mutates state must re-verify the caller's role on every request, independent of what the client claims.
 - **Vulnerability details written to world-readable files** (2 projects)
@@ -191,8 +203,6 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Use `git stash` or commit WIP with a `fixup!` prefix before switching branches. Consider trunk-based development with short-lived feature flags to avoid branch abandonment.
 - **package-lock.json uncommitted — non-reproducible installs** (seen here)
   → Always commit package-lock.json. Use `npm ci` in CI/CD. Run `npm audit` in the pipeline and fail on high/critical vulnerabilities.
-- **No shared constants or types package — enum/string drift** (3 projects)
-  → Create a `/shared` or `/packages/constants` workspace package containing all cross-cutting enums and types. Reference it via npm workspaces or a monorepo tool.
 - **Hardcoded runtime values that require code changes to correct** (3 projects)
   → Extract all environment-specific or time-sensitive values to configuration (env vars or a config file). Values that have been wrong in production once should never be hardcoded again.
 - **Credentials committed to or leaked through version control** (3 projects)
@@ -205,14 +215,16 @@ _Auto-updated by Brain Platform on 2026-04-01. Do not edit this section manually
   → Parse and validate all external inputs at the boundary: use `parseInt`/`parseFloat` with NaN checks or a schema validator (zod, pydantic). Use `hmac.compare_digest` or `timingSafeEqual` for any secret comparison.
 - **Missing or uncommitted lockfiles allow non-deterministic installs** (seen here)
   → Commit package-lock.json (or equivalent) on every dependency change. Add it to CI verification so a lockfile drift causes a build failure before it reaches production.
+- **No rate limiting on public-facing endpoints** (3 projects)
+  → Apply per-IP rate limiting at the framework or reverse-proxy layer; require table/session identity on order endpoints before accepting POST payloads
+- **Global exception handlers swallow errors instead of surfacing them** (2 projects)
+  → Log the full error and stack, emit a metric or alert, then call process.exit(1); never silently continue after an unhandled rejection in production
 - **Dependencies pinned years behind current major versions** (seen here)
   → Enable Dependabot or Renovate with auto-merge for patch updates and a weekly PR for minor/major bumps. Treat dependency updates as routine maintenance, not optional work.
 - **Automated commits with meaningless messages** (seen here)
   → Include a timestamp, record count delta, and source identifier in every automated commit message; this costs one interpolated string and saves hours of debugging
 - **Test files exist but contain no assertions** (seen here)
   → A test with no assertion is worse than no test — it implies coverage that does not exist; add a lint rule that fails on test files with zero expect/assert calls
-- **Lockfiles uncommitted — dependency resolution non-deterministic** (seen here)
-  → Commit package-lock.json (or yarn.lock / pnpm-lock.yaml) and treat it as a first-class artifact. Add a CI step that fails if the lockfile is out of sync with package.json.
 - **Fix commits marked unconfirmed with no verification step** (seen here)
   → Define a done-definition for each finding: what command or test output proves the issue is closed. Link that evidence in the commit message. A fix that cannot be verified is not a fix.
 
