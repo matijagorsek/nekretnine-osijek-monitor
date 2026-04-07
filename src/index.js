@@ -20,12 +20,16 @@ import * as njuskalo from "./scrapers/njuskalo.js";
 import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
+import * as oglasnik from "./scrapers/oglasnik.js";
+import * as crozilla from "./scrapers/crozilla.js";
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
   { name: "Index", module: indexOglasi },
   { name: "Nekretnine.hr", module: nekretnineHr },
   { name: "Lokalne agencije", module: localAgencies },
+  { name: "Oglasnik", module: oglasnik },
+  { name: "Crozilla", module: crozilla },
 ];
 
 // ─── Main scraping pipeline ───
