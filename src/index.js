@@ -86,15 +86,27 @@ async function runPipeline() {
     existingForDedup.push(listing);
 
     // Save to DB
-    insertListing(listing);
+    try {
+      insertListing(listing);
+    } catch (err) {
+      console.error(`[db] Failed to insert listing "${listing.id}":`, err.message);
+    }
   }
 
   console.log(`✨ New unique listings: ${newListings.length}`);
 
   // 4. Notify via Telegram
   if (newListings.length > 0) {
-    await notifyNewListings(newListings);
-    markNotified(newListings.map((l) => l.id));
+    try {
+      await notifyNewListings(newListings);
+    } catch (err) {
+      console.error("[telegram] Failed to send notifications:", err.message);
+    }
+    try {
+      markNotified(newListings.map((l) => l.id));
+    } catch (err) {
+      console.error("[db] Failed to mark listings as notified:", err.message);
+    }
     console.log(`📨 Telegram notification sent!`);
   } else {
     console.log(`😴 Nema novih nekretnina danas.`);
@@ -118,7 +130,12 @@ async function main() {
 
   if (runNow) {
     console.log("🚀 Running immediately (--run-now)...");
-    await runPipeline();
+    try {
+      await runPipeline();
+    } catch (err) {
+      console.error("💥 Pipeline error:", err);
+      process.exit(1);
+    }
     process.exit(0);
   }
 
