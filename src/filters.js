@@ -29,6 +29,12 @@ export function applyFilters(listings) {
       if (filters.roomsMax && l.rooms > filters.roomsMax) return false;
     }
 
+    // Floor range
+    if (l.floor != null) {
+      if (filters.floorMin != null && l.floor < filters.floorMin) return false;
+      if (filters.floorMax != null && l.floor > filters.floorMax) return false;
+    }
+
     // Location filter (if specific locations are set)
     if (filters.locations.length > 0 && l.location) {
       const locLower = l.location.toLowerCase();
@@ -39,5 +45,33 @@ export function applyFilters(listings) {
     }
 
     return true;
+  });
+}
+
+/**
+ * Sort listings by the configured sort field and order.
+ */
+export function applySorting(listings) {
+  const { by, order } = config.sort;
+  const dir = order === "asc" ? 1 : -1;
+
+  return [...listings].sort((a, b) => {
+    let aVal, bVal;
+
+    if (by === "price") {
+      aVal = a.price ?? -Infinity;
+      bVal = b.price ?? -Infinity;
+    } else if (by === "size") {
+      aVal = a.size ?? -Infinity;
+      bVal = b.size ?? -Infinity;
+    } else {
+      // date — use dateAdded if present, fall back to insertion order (stable)
+      aVal = a.dateAdded ? new Date(a.dateAdded).getTime() : 0;
+      bVal = b.dateAdded ? new Date(b.dateAdded).getTime() : 0;
+    }
+
+    if (aVal < bVal) return -dir;
+    if (aVal > bVal) return dir;
+    return 0;
   });
 }

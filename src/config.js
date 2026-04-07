@@ -17,9 +17,16 @@ export const config = {
     sizeMax: Number(process.env.FILTER_SIZE_MAX) || 500,
     roomsMin: Number(process.env.FILTER_ROOMS_MIN) || 0,
     roomsMax: Number(process.env.FILTER_ROOMS_MAX) || 10,
+    floorMin: process.env.FILTER_FLOOR_MIN !== undefined ? Number(process.env.FILTER_FLOOR_MIN) : null,
+    floorMax: process.env.FILTER_FLOOR_MAX !== undefined ? Number(process.env.FILTER_FLOOR_MAX) : null,
     locations: process.env.FILTER_LOCATIONS
       ? process.env.FILTER_LOCATIONS.split(",").map((s) => s.trim().toLowerCase())
       : [],
+  },
+
+  sort: {
+    by: process.env.SORT_BY || "date", // date | price | size
+    order: process.env.SORT_ORDER || "desc", // asc | desc
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
