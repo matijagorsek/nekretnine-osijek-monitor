@@ -38,6 +38,30 @@ export function applyFilters(listings) {
       if (!matches) return false;
     }
 
+    // Neighborhood filter
+    if (filters.neighborhoods.length > 0 && l.location) {
+      const locLower = l.location.toLowerCase();
+      const matches = filters.neighborhoods.some(
+        (n) => locLower.includes(n) || n.includes(locLower)
+      );
+      if (!matches) return false;
+    }
+
     return true;
+  });
+}
+
+/**
+ * Sort listings by the configured field and order.
+ */
+export function applySort(listings) {
+  const { sortBy, sortOrder } = config.filters;
+
+  if (!sortBy || sortBy === "none") return listings;
+
+  return [...listings].sort((a, b) => {
+    const aVal = a[sortBy] ?? 0;
+    const bVal = b[sortBy] ?? 0;
+    return sortOrder === "desc" ? bVal - aVal : aVal - bVal;
   });
 }
