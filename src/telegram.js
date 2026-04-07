@@ -47,7 +47,7 @@ export async function notifyNewListings(listings) {
   }
 
   // Header message
-  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"─".repeat(30)}`;
+  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
@@ -63,7 +63,10 @@ export async function notifyNewListings(listings) {
     }
     current += item + "\n\n";
   }
-  if (current.trim()) messages.push(current);
+  if (current.trim()) {
+    const footer = `\n⏱ <i>Ažurirano: ${new Date().toLocaleTimeString("hr-HR", { hour: "2-digit", minute: "2-digit" })}</i>`;
+    messages.push(current + footer);
+  }
 
   // Send all chunks
   let success = 0;
@@ -80,18 +83,22 @@ export async function notifyNewListings(listings) {
 function formatListing(l) {
   const icon = l.type === "kuca" ? "🏡" : "🏢";
   const source = formatSource(l.source);
-  const price = l.price ? `💰 ${l.price.toLocaleString("hr-HR")} €` : "💰 Cijena na upit";
+  const price = l.price ? `💰 <b>${l.price.toLocaleString("hr-HR")} €</b>` : "💰 <i>Cijena na upit</i>";
   const size = l.size ? `📐 ${l.size} m²` : "";
-  const rooms = l.rooms ? `🛏 ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : "";
+  const rooms = l.rooms ? `🛏️ ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : "";
   const location = l.location ? `📍 ${capitalize(l.location)}` : "";
 
-  const details = [price, size, rooms, location].filter(Boolean).join(" • ");
+  const details = [size, rooms, location].filter(Boolean).join("  •  ");
 
-  return [
+  const lines = [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
-    details,
-    `🔗 <a href="${l.url}">Otvori oglas</a> <i>(${source})</i>`,
-  ].join("\n");
+    price,
+  ];
+  if (details) lines.push(details);
+  lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
+  lines.push(`${"─".repeat(26)}`);
+
+  return lines.join("\n");
 }
 
 function formatSource(source) {
