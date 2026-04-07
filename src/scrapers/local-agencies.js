@@ -119,7 +119,7 @@ function parseGenericListings(html, agency) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      // Skip malformed
+      console.warn(`[local:${agencyName}] Failed to parse listing: ${e.message}`);
     }
   });
 

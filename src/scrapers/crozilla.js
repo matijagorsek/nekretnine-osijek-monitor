@@ -75,7 +75,7 @@ function parseListings(html, type) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      // Skip malformed listings
+      console.warn(`[crozilla] Failed to parse listing: ${e.message}`);
     }
   });
 

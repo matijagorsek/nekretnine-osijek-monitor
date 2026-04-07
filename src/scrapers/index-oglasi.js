@@ -72,7 +72,7 @@ function parseListings(html, type) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      // Skip
+      console.warn(`[index] Failed to parse listing: ${e.message}`);
     }
   });
 

@@ -79,7 +79,7 @@ function parseListings(html, type) {
           description: descText.slice(0, 300),
         });
       } catch (e) {
-        // Skip malformed listings
+        console.warn(`[njuskalo] Failed to parse listing: ${e.message}`);
       }
     }
   );

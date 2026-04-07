@@ -74,7 +74,7 @@ function parseListings(html, type) {
           description: infoText.slice(0, 300),
         });
       } catch (e) {
-        // Skip
+        console.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
       }
     }
   );

@@ -47,7 +47,7 @@ async function runPipeline() {
       const listings = await scraper.module.scrape(config.filters.type);
       allListings.push(...listings);
     } catch (err) {
-      console.error(`❌ ${scraper.name} error:`, err.message);
+      console.error(`❌ ${scraper.name} error:`, err.message, err.stack);
     }
   }
 
