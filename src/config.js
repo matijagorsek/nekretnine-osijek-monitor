@@ -30,4 +30,14 @@ export const config = {
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
+
+  notification: {
+    showPrice: process.env.NOTIFY_SHOW_PRICE !== "false",
+    showSize: process.env.NOTIFY_SHOW_SIZE !== "false",
+    showRooms: process.env.NOTIFY_SHOW_ROOMS !== "false",
+    showLocation: process.env.NOTIFY_SHOW_LOCATION !== "false",
+    showSource: process.env.NOTIFY_SHOW_SOURCE !== "false",
+    disablePreview: process.env.NOTIFY_DISABLE_PREVIEW === "true",
+    customHeader: process.env.NOTIFY_CUSTOM_HEADER || "",
+  },
 };

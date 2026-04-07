@@ -15,7 +15,7 @@ async function sendMessage(text, parseMode = "HTML") {
         chat_id: config.telegram.chatId,
         text,
         parse_mode: parseMode,
-        disable_web_page_preview: false,
+        disable_web_page_preview: config.notification.disablePreview,
       }),
     });
 
@@ -47,7 +47,8 @@ export async function notifyNewListings(listings) {
   }
 
   // Header message
-  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"─".repeat(30)}`;
+  const headerTitle = config.notification.customHeader || "🏠 <b>Nove nekretnine u Osijeku</b>";
+  const header = `${headerTitle}\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"─".repeat(30)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
@@ -78,20 +79,22 @@ export async function notifyNewListings(listings) {
 }
 
 function formatListing(l) {
+  const n = config.notification;
   const icon = l.type === "kuca" ? "🏡" : "🏢";
   const source = formatSource(l.source);
-  const price = l.price ? `💰 ${l.price.toLocaleString("hr-HR")} €` : "💰 Cijena na upit";
-  const size = l.size ? `📐 ${l.size} m²` : "";
-  const rooms = l.rooms ? `🛏 ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : "";
-  const location = l.location ? `📍 ${capitalize(l.location)}` : "";
+  const price = n.showPrice ? (l.price ? `💰 ${l.price.toLocaleString("hr-HR")} €` : "💰 Cijena na upit") : null;
+  const size = n.showSize && l.size ? `📐 ${l.size} m²` : null;
+  const rooms = n.showRooms && l.rooms ? `🛏 ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : null;
+  const location = n.showLocation && l.location ? `📍 ${capitalize(l.location)}` : null;
 
   const details = [price, size, rooms, location].filter(Boolean).join(" • ");
+  const sourceTag = n.showSource ? ` <i>(${source})</i>` : "";
 
   return [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
     details,
-    `🔗 <a href="${l.url}">Otvori oglas</a> <i>(${source})</i>`,
-  ].join("\n");
+    `🔗 <a href="${l.url}">Otvori oglas</a>${sourceTag}`,
+  ].filter(Boolean).join("\n");
 }
 
 function formatSource(source) {
