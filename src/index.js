@@ -11,7 +11,7 @@ import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters } from "./filters.js";
+import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
@@ -53,8 +53,8 @@ async function runPipeline() {
 
   console.log(`\n📊 Total raw listings: ${allListings.length}`);
 
-  // 2. Apply filters
-  const filtered = applyFilters(allListings);
+  // 2. Apply filters and sort
+  const filtered = applySort(applyFilters(allListings));
   console.log(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones

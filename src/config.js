@@ -22,6 +22,11 @@ export const config = {
     locations: process.env.FILTER_LOCATIONS
       ? process.env.FILTER_LOCATIONS.split(",").map((s) => s.trim().toLowerCase())
       : [],
+    neighborhoods: process.env.FILTER_NEIGHBORHOODS
+      ? process.env.FILTER_NEIGHBORHOODS.split(",").map((s) => s.trim().toLowerCase())
+      : [],
+    sortBy: process.env.FILTER_SORT_BY || "price", // price | size | rooms | none
+    sortOrder: process.env.FILTER_SORT_ORDER || "asc", // asc | desc
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
