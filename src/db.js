@@ -32,6 +32,12 @@ function migrate() {
       notified INTEGER DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS favorites (
+      listing_id TEXT PRIMARY KEY,
+      saved_price REAL,
+      added_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
@@ -87,6 +93,62 @@ export function getUnnotified() {
   return db
     .prepare(
       "SELECT * FROM listings WHERE notified = 0 ORDER BY first_seen DESC"
+    )
+    .all();
+}
+
+/**
+ * Get a single listing by id
+ */
+export function getListingById(id) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM listings WHERE id = ?").get(id);
+}
+
+/**
+ * Update the stored price of an existing listing
+ */
+export function updateListingPrice(id, newPrice) {
+  const db = getDb();
+  db.prepare("UPDATE listings SET price = ? WHERE id = ?").run(newPrice, id);
+}
+
+/**
+ * Add a listing to favorites
+ */
+export function addFavorite(listingId, price) {
+  const db = getDb();
+  db.prepare(
+    "INSERT OR REPLACE INTO favorites (listing_id, saved_price) VALUES (?, ?)"
+  ).run(listingId, price ?? null);
+}
+
+/**
+ * Remove a listing from favorites
+ */
+export function removeFavorite(listingId) {
+  const db = getDb();
+  db.prepare("DELETE FROM favorites WHERE listing_id = ?").run(listingId);
+}
+
+/**
+ * Check if a listing is a favorite
+ */
+export function isFavorite(listingId) {
+  const db = getDb();
+  return !!db.prepare("SELECT 1 FROM favorites WHERE listing_id = ?").get(listingId);
+}
+
+/**
+ * Get all favorited listings with their full data
+ */
+export function getFavorites() {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT l.*, f.saved_price AS fav_saved_price, f.added_at AS fav_added_at
+       FROM favorites f
+       JOIN listings l ON l.id = f.listing_id`
     )
     .all();
 }

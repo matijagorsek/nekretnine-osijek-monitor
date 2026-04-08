@@ -4,7 +4,7 @@ import { config } from "./config.js";
 const API_BASE = `https://api.telegram.org/bot${config.telegram.botToken}`;
 
 /**
- * Send a single Telegram message (Markdown V2)
+ * Send a single Telegram message (HTML)
  */
 async function sendMessage(text, parseMode = "HTML") {
   try {
@@ -32,8 +32,92 @@ async function sendMessage(text, parseMode = "HTML") {
 }
 
 /**
+ * Send a message with an inline keyboard
+ */
+async function sendMessageWithKeyboard(text, inlineKeyboard, parseMode = "HTML") {
+  try {
+    const resp = await fetch(`${API_BASE}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: config.telegram.chatId,
+        text,
+        parse_mode: parseMode,
+        disable_web_page_preview: config.notification.disablePreview,
+        reply_markup: { inline_keyboard: inlineKeyboard },
+      }),
+    });
+
+    const data = await resp.json();
+    if (!data.ok) {
+      console.error("[telegram] Send failed:", data.description);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[telegram] Error:", err.message);
+    return false;
+  }
+}
+
+/**
+ * Answer a callback query (clears the loading spinner on the button)
+ */
+export async function answerCallbackQuery(callbackQueryId, text) {
+  try {
+    await fetch(`${API_BASE}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    });
+  } catch (err) {
+    console.error("[telegram] answerCallbackQuery error:", err.message);
+  }
+}
+
+/**
+ * Start long-polling for Telegram updates (callback_query only).
+ * Calls onCallbackQuery(callbackQuery) for each received button press.
+ */
+export function startPolling(onCallbackQuery) {
+  let offset = 0;
+
+  const poll = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/getUpdates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          offset,
+          timeout: 30,
+          allowed_updates: ["callback_query"],
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok && data.result.length > 0) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          if (update.callback_query) {
+            await onCallbackQuery(update.callback_query).catch((err) =>
+              console.error("[telegram] Callback handler error:", err.message)
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[telegram] Polling error:", err.message);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    setImmediate(poll);
+  };
+
+  poll();
+  console.log("[telegram] Polling started for callback queries");
+}
+
+/**
  * Format and send new listings as Telegram notifications.
- * Groups them nicely, respects Telegram's 4096 char limit.
+ * Each listing is sent as an individual message with a ⭐ Save button.
  */
 export async function notifyNewListings(listings) {
   if (!listings.length) {
@@ -49,33 +133,46 @@ export async function notifyNewListings(listings) {
   // Header message
   const headerTitle = config.notification.customHeader || "🏠 <b>Nove nekretnine u Osijeku</b>";
   const header = `${headerTitle}\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"─".repeat(30)}`;
+  await sendMessage(header);
+  await new Promise((r) => setTimeout(r, 100));
 
-  // Format each listing
-  const formatted = listings.map((l) => formatListing(l));
-
-  // Split into chunks respecting Telegram's 4096 char limit
-  const messages = [];
-  let current = header + "\n\n";
-
-  for (const item of formatted) {
-    if (current.length + item.length + 2 > 4000) {
-      messages.push(current);
-      current = "";
-    }
-    current += item + "\n\n";
-  }
-  if (current.trim()) messages.push(current);
-
-  // Send all chunks
+  // Send each listing individually with a favorite button
   let success = 0;
-  for (const msg of messages) {
-    const ok = await sendMessage(msg);
+  for (const listing of listings) {
+    const text = formatListing(listing);
+    const keyboard = [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${listing.id}` }]];
+    const ok = await sendMessageWithKeyboard(text, keyboard);
     if (ok) success++;
-    // Rate limit: max 30 msgs/sec
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  console.log(`[telegram] Sent ${success}/${messages.length} messages for ${listings.length} listings`);
+  console.log(`[telegram] Sent ${success}/${listings.length} listing messages`);
+}
+
+/**
+ * Notify user that a favorited listing has dropped in price.
+ */
+export async function notifyPriceDrop(listing, oldPrice) {
+  const drop = oldPrice - listing.price;
+  const pct = ((drop / oldPrice) * 100).toFixed(1);
+  const text =
+    `📉 <b>Pad cijene — omiljeni oglas!</b>\n\n${formatListing(listing)}\n\n` +
+    `💰 Stara cijena: <b>${oldPrice.toLocaleString("hr-HR")} €</b>\n` +
+    `💰 Nova cijena: <b>${listing.price.toLocaleString("hr-HR")} €</b>\n` +
+    `📉 Uštedite: <b>-${drop.toLocaleString("hr-HR")} € (-${pct}%)</b>`;
+  const keyboard = [[{ text: "💔 Ukloni iz favorita", callback_data: `unfav:${listing.id}` }]];
+  return sendMessageWithKeyboard(text, keyboard);
+}
+
+/**
+ * Notify user that a new listing is similar to one of their favorites.
+ */
+export async function notifySimilarListing(newListing, favListing) {
+  const text =
+    `🔔 <b>Novi oglas sličan omiljenom!</b>\n\n${formatListing(newListing)}\n\n` +
+    `<i>Slično s: ${escapeHtml(favListing.title)}</i>`;
+  const keyboard = [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${newListing.id}` }]];
+  return sendMessageWithKeyboard(text, keyboard);
 }
 
 function formatListing(l) {

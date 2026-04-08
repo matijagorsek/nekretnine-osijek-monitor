@@ -10,10 +10,16 @@ if (missing.length) {
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
-import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
+import {
+  getDb, listingExists, insertListing, markNotified, getUnnotified,
+  getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites,
+} from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySorting } from "./filters.js";
-import { notifyNewListings, sendTestMessage } from "./telegram.js";
+import {
+  notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
+  startPolling, answerCallbackQuery,
+} from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -67,6 +73,17 @@ async function runPipeline() {
 
     // Check DB for exact match
     if (listingExists(listing.id, fingerprint)) {
+      // Check for price drop on favorited listings
+      if (listing.price != null && isFavorite(listing.id)) {
+        const existing = getListingById(listing.id);
+        if (existing && existing.price != null && listing.price < existing.price) {
+          await notifyPriceDrop(listing, existing.price);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (existing && existing.price !== listing.price) {
+          updateListingPrice(listing.id, listing.price);
+        }
+      }
       continue;
     }
 
@@ -96,6 +113,22 @@ async function runPipeline() {
     console.log(`😴 Nema novih nekretnina danas.`);
   }
 
+  // 5. Check new listings for similarity to favorites
+  const favorites = getFavorites();
+  if (favorites.length > 0 && newListings.length > 0) {
+    for (const newListing of newListings) {
+      for (const fav of favorites) {
+        if (newListing.id === fav.id) continue;
+        const { isDupe, matchedWith } = isDuplicate(newListing, [fav], config.dedupeThreshold);
+        if (isDupe) {
+          await notifySimilarListing(newListing, matchedWith);
+          await new Promise((r) => setTimeout(r, 100));
+          break;
+        }
+      }
+    }
+  }
+
   console.log(`\n✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
 }
 
@@ -117,6 +150,27 @@ async function main() {
     await runPipeline();
     process.exit(0);
   }
+
+  // Start polling for Telegram button callbacks (fav/unfav)
+  startPolling(async (callbackQuery) => {
+    const { id, data } = callbackQuery;
+    if (!data) return;
+
+    if (data.startsWith("fav:")) {
+      const listingId = data.slice(4);
+      const listing = getListingById(listingId);
+      if (listing) {
+        addFavorite(listingId, listing.price);
+        await answerCallbackQuery(id, "⭐ Dodano u favorite!");
+        console.log(`[favorites] Saved: ${listingId}`);
+      }
+    } else if (data.startsWith("unfav:")) {
+      const listingId = data.slice(6);
+      removeFavorite(listingId);
+      await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
+      console.log(`[favorites] Removed: ${listingId}`);
+    }
+  });
 
   // Send test message on startup
   console.log("📡 Sending startup test message...");
