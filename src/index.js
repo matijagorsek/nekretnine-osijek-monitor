@@ -13,12 +13,13 @@ import { config } from "./config.js";
 import {
   getDb, listingExists, insertListing, markNotified, getUnnotified,
   getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites,
+  addUserFilter, removeUserFilter, getUserFilters,
 } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySorting } from "./filters.js";
 import {
   notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
-  startPolling, answerCallbackQuery,
+  startPolling, answerCallbackQuery, sendFilterStatus,
 } from "./telegram.js";
 
 // Scrapers
@@ -151,26 +152,75 @@ async function main() {
     process.exit(0);
   }
 
-  // Start polling for Telegram button callbacks (fav/unfav)
-  startPolling(async (callbackQuery) => {
-    const { id, data } = callbackQuery;
-    if (!data) return;
+  // Start polling for Telegram button callbacks (fav/unfav) and /filter commands
+  startPolling(
+    async (callbackQuery) => {
+      const { id, data } = callbackQuery;
+      if (!data) return;
 
-    if (data.startsWith("fav:")) {
-      const listingId = data.slice(4);
-      const listing = getListingById(listingId);
-      if (listing) {
-        addFavorite(listingId, listing.price);
-        await answerCallbackQuery(id, "⭐ Dodano u favorite!");
-        console.log(`[favorites] Saved: ${listingId}`);
+      if (data.startsWith("fav:")) {
+        const listingId = data.slice(4);
+        const listing = getListingById(listingId);
+        if (listing) {
+          addFavorite(listingId, listing.price);
+          await answerCallbackQuery(id, "⭐ Dodano u favorite!");
+          console.log(`[favorites] Saved: ${listingId}`);
+        }
+      } else if (data.startsWith("unfav:")) {
+        const listingId = data.slice(6);
+        removeFavorite(listingId);
+        await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
+        console.log(`[favorites] Removed: ${listingId}`);
       }
-    } else if (data.startsWith("unfav:")) {
-      const listingId = data.slice(6);
-      removeFavorite(listingId);
-      await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
-      console.log(`[favorites] Removed: ${listingId}`);
+    },
+    async (message) => {
+      const text = message.text || "";
+      const chatId = String(message.chat?.id);
+
+      // Only respond to the configured chat
+      if (chatId !== config.telegram.chatId) return;
+
+      if (!text.startsWith("/filter")) return;
+
+      const parts = text.trim().split(/\s+/);
+      const sub = parts[1]; // add | remove | exclude | unexclude | list
+      const keyword = parts.slice(2).join(" ").toLowerCase().trim();
+
+      if (sub === "list") {
+        const includes = getUserFilters("include").map((f) => f.keyword);
+        const excludes = getUserFilters("exclude").map((f) => f.keyword);
+        await sendFilterStatus(includes, excludes);
+      } else if (sub === "add" && keyword) {
+        addUserFilter("include", keyword);
+        console.log(`[filters] Include keyword added: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "remove" && keyword) {
+        removeUserFilter("include", keyword);
+        console.log(`[filters] Include keyword removed: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "exclude" && keyword) {
+        addUserFilter("exclude", keyword);
+        console.log(`[filters] Exclude keyword added: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "unexclude" && keyword) {
+        removeUserFilter("exclude", keyword);
+        console.log(`[filters] Exclude keyword removed: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      }
     }
-  });
+  );
 
   // Send test message on startup
   console.log("📡 Sending startup test message...");

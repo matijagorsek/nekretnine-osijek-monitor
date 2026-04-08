@@ -38,6 +38,13 @@ function migrate() {
       added_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS user_filters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('include', 'exclude')),
+      keyword TEXT NOT NULL,
+      UNIQUE(type, keyword)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
@@ -137,6 +144,30 @@ export function removeFavorite(listingId) {
 export function isFavorite(listingId) {
   const db = getDb();
   return !!db.prepare("SELECT 1 FROM favorites WHERE listing_id = ?").get(listingId);
+}
+
+/**
+ * Add a user-defined keyword filter
+ */
+export function addUserFilter(type, keyword) {
+  const db = getDb();
+  db.prepare("INSERT OR IGNORE INTO user_filters (type, keyword) VALUES (?, ?)").run(type, keyword.toLowerCase().trim());
+}
+
+/**
+ * Remove a user-defined keyword filter
+ */
+export function removeUserFilter(type, keyword) {
+  const db = getDb();
+  db.prepare("DELETE FROM user_filters WHERE type = ? AND keyword = ?").run(type, keyword.toLowerCase().trim());
+}
+
+/**
+ * Get all user-defined keyword filters, optionally by type
+ */
+export function getUserFilters(type) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM user_filters WHERE type = ? ORDER BY keyword").all(type);
 }
 
 /**

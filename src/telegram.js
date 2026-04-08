@@ -76,11 +76,13 @@ export async function answerCallbackQuery(callbackQueryId, text) {
 }
 
 /**
- * Start long-polling for Telegram updates (callback_query only).
- * Calls onCallbackQuery(callbackQuery) for each received button press.
+ * Start long-polling for Telegram updates.
+ * Calls onCallbackQuery(callbackQuery) for button presses.
+ * Calls onMessage(message) for text messages (optional).
  */
-export function startPolling(onCallbackQuery) {
+export function startPolling(onCallbackQuery, onMessage = null) {
   let offset = 0;
+  const allowedUpdates = ["callback_query", ...(onMessage ? ["message"] : [])];
 
   const poll = async () => {
     try {
@@ -90,7 +92,7 @@ export function startPolling(onCallbackQuery) {
         body: JSON.stringify({
           offset,
           timeout: 30,
-          allowed_updates: ["callback_query"],
+          allowed_updates: allowedUpdates,
         }),
       });
       const data = await resp.json();
@@ -100,6 +102,11 @@ export function startPolling(onCallbackQuery) {
           if (update.callback_query) {
             await onCallbackQuery(update.callback_query).catch((err) =>
               console.error("[telegram] Callback handler error:", err.message)
+            );
+          }
+          if (update.message && onMessage) {
+            await onMessage(update.message).catch((err) =>
+              console.error("[telegram] Message handler error:", err.message)
             );
           }
         }
@@ -112,7 +119,7 @@ export function startPolling(onCallbackQuery) {
   };
 
   poll();
-  console.log("[telegram] Polling started for callback queries");
+  console.log("[telegram] Polling started for callback queries and messages");
 }
 
 /**
@@ -215,6 +222,20 @@ function escapeHtml(text) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/**
+ * Send the current user-defined filter list
+ */
+export async function sendFilterStatus(includeKeywords, excludeKeywords) {
+  const inc = includeKeywords.length > 0 ? includeKeywords.map((k) => `  • ${k}`).join("\n") : "  (none)";
+  const exc = excludeKeywords.length > 0 ? excludeKeywords.map((k) => `  • ${k}`).join("\n") : "  (none)";
+  return sendMessage(
+    `🔍 <b>Custom Filters</b>\n\n` +
+    `<b>Include keywords</b> (at least one must match):\n${inc}\n\n` +
+    `<b>Exclude keywords</b> (listing rejected if matched):\n${exc}\n\n` +
+    `<i>Commands:\n/filter add &lt;keyword&gt;\n/filter remove &lt;keyword&gt;\n/filter exclude &lt;keyword&gt;\n/filter unexclude &lt;keyword&gt;\n/filter list</i>`
+  );
 }
 
 /**

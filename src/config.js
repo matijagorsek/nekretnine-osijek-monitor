@@ -22,6 +22,12 @@ export const config = {
     locations: process.env.FILTER_LOCATIONS
       ? process.env.FILTER_LOCATIONS.split(",").map((s) => s.trim().toLowerCase())
       : [],
+    keywords: process.env.FILTER_KEYWORDS
+      ? process.env.FILTER_KEYWORDS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [],
+    excludeKeywords: process.env.FILTER_EXCLUDE_KEYWORDS
+      ? process.env.FILTER_EXCLUDE_KEYWORDS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [],
   },
 
   sort: {

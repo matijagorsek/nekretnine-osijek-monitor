@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { getUserFilters } from "./db.js";
 
 /**
  * Apply all configured filters to a list of listings.
@@ -42,6 +43,26 @@ export function applyFilters(listings) {
         (fl) => locLower.includes(fl) || fl.includes(locLower)
       );
       if (!matches) return false;
+    }
+
+    // Keyword include filters (at least one must match if any defined)
+    const includeKeywords = [
+      ...filters.keywords,
+      ...getUserFilters("include").map((f) => f.keyword),
+    ];
+    if (includeKeywords.length > 0) {
+      const searchText = `${l.title || ""} ${l.description || ""}`.toLowerCase();
+      if (!includeKeywords.some((kw) => searchText.includes(kw))) return false;
+    }
+
+    // Keyword exclude filters (none must match)
+    const excludeKeywords = [
+      ...filters.excludeKeywords,
+      ...getUserFilters("exclude").map((f) => f.keyword),
+    ];
+    if (excludeKeywords.length > 0) {
+      const searchText = `${l.title || ""} ${l.description || ""}`.toLowerCase();
+      if (excludeKeywords.some((kw) => searchText.includes(kw))) return false;
     }
 
     return true;
