@@ -9,7 +9,7 @@ if (missing.length) {
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
-import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort, matchesTrigger } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
@@ -47,8 +47,19 @@ async function runPipeline() {
         console.log(`\n📡 Scraping: ${scraper.name}...`);
         const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
         if (listings.length === 0 && containerCount === 0) {
-          await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure`);
-          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken`);
+          const healthKey = `${scraper.name}:${city}`;
+          const failures = recordScraperFailure(healthKey);
+          if (failures >= 3) {
+            await sendMessage(`🚨 ${scraper.name} (${city}): selector failure for ${failures} consecutive runs — website structure may have changed, manual selector update required`);
+          } else {
+            await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure (consecutive failure #${failures})`);
+          }
+          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken (consecutive failure #${failures})`);
+        } else {
+          const recovered = recordScraperSuccess(`${scraper.name}:${city}`);
+          if (recovered) {
+            await sendMessage(`✅ ${scraper.name} (${city}): selectors recovered and working again`);
+          }
         }
         allListings.push(...listings);
       } catch (err) {
