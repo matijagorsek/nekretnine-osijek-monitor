@@ -45,6 +45,18 @@ function migrate() {
       UNIQUE(type, keyword)
     );
 
+    CREATE TABLE IF NOT EXISTS run_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      scrapers_ok INTEGER DEFAULT 0,
+      scrapers_failed INTEGER DEFAULT 0,
+      total_raw INTEGER DEFAULT 0,
+      after_filters INTEGER DEFAULT 0,
+      new_listings INTEGER DEFAULT 0,
+      scraper_errors TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
@@ -168,6 +180,25 @@ export function removeUserFilter(type, keyword) {
 export function getUserFilters(type) {
   const db = getDb();
   return db.prepare("SELECT * FROM user_filters WHERE type = ? ORDER BY keyword").all(type);
+}
+
+/**
+ * Record a pipeline run's statistics
+ */
+export function recordRunLog(log) {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO run_logs (started_at, finished_at, scrapers_ok, scrapers_failed, total_raw, after_filters, new_listings, scraper_errors)
+     VALUES (@startedAt, @finishedAt, @scrapersOk, @scrapersFailed, @totalRaw, @afterFilters, @newListings, @scraperErrors)`
+  ).run(log);
+}
+
+/**
+ * Get the most recent pipeline run logs
+ */
+export function getRecentRunLogs(limit = 10) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM run_logs ORDER BY id DESC LIMIT ?").all(limit);
 }
 
 /**

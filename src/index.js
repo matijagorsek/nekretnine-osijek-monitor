@@ -13,13 +13,13 @@ import { config } from "./config.js";
 import {
   getDb, listingExists, insertListing, markNotified, getUnnotified,
   getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites,
-  addUserFilter, removeUserFilter, getUserFilters,
+  addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs,
 } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySorting } from "./filters.js";
 import {
   notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
-  startPolling, answerCallbackQuery, sendFilterStatus,
+  startPolling, answerCallbackQuery, sendFilterStatus, sendStats,
 } from "./telegram.js";
 
 // Scrapers
@@ -42,18 +42,27 @@ const SCRAPERS = [
 // ─── Main scraping pipeline ───
 
 async function runPipeline() {
+  const startedAt = new Date().toISOString();
   console.log(`\n${"=".repeat(60)}`);
   console.log(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
   console.log(`${"=".repeat(60)}\n`);
 
   // 1. Scrape all sources
   let allListings = [];
+  let scrapersOk = 0;
+  let scrapersFailed = 0;
+  const scraperErrors = [];
+
   for (const scraper of SCRAPERS) {
     try {
       console.log(`\n📡 Scraping: ${scraper.name}...`);
       const listings = await scraper.module.scrape(config.filters.type);
       allListings.push(...listings);
+      scrapersOk++;
+      console.log(`   ✅ ${scraper.name}: ${listings.length} listings`);
     } catch (err) {
+      scrapersFailed++;
+      scraperErrors.push(`${scraper.name}: ${err.message}`);
       console.error(`❌ ${scraper.name} error:`, err.message, err.stack);
     }
   }
@@ -130,6 +139,23 @@ async function runPipeline() {
     }
   }
 
+  const finishedAt = new Date().toISOString();
+  recordRunLog({
+    startedAt,
+    finishedAt,
+    scrapersOk,
+    scrapersFailed,
+    totalRaw: allListings.length,
+    afterFilters: filtered.length,
+    newListings: newListings.length,
+    scraperErrors: scraperErrors.length > 0 ? scraperErrors.join("; ") : null,
+  });
+
+  console.log(`\n📊 Run stats: ${scrapersOk} scrapers ok, ${scrapersFailed} failed`);
+  if (scraperErrors.length > 0) {
+    console.log(`   Errors: ${scraperErrors.join(" | ")}`);
+  }
+  console.log(`   Raw: ${allListings.length} → Filtered: ${filtered.length} → New: ${newListings.length}`);
   console.log(`\n✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
 }
 
@@ -179,6 +205,12 @@ async function main() {
 
       // Only respond to the configured chat
       if (chatId !== config.telegram.chatId) return;
+
+      if (text === "/stats") {
+        const logs = getRecentRunLogs(5);
+        await sendStats(logs);
+        return;
+      }
 
       if (!text.startsWith("/filter")) return;
 
@@ -234,7 +266,7 @@ async function main() {
     try {
       await runPipeline();
     } catch (err) {
-      console.error("💥 Pipeline error:", err);
+      console.error("💥 Pipeline error:", err.message, err.stack);
     }
   }, {
     timezone: "Europe/Zagreb",

@@ -239,6 +239,34 @@ export async function sendFilterStatus(includeKeywords, excludeKeywords) {
 }
 
 /**
+ * Send recent pipeline run statistics
+ */
+export async function sendStats(logs) {
+  if (!logs.length) {
+    return sendMessage("📊 <b>Run Statistics</b>\n\nNo runs recorded yet.");
+  }
+
+  const lines = logs.map((log) => {
+    const date = new Date(log.started_at).toLocaleString("hr-HR");
+    const durationMs = log.finished_at
+      ? new Date(log.finished_at) - new Date(log.started_at)
+      : null;
+    const duration = durationMs != null ? `${Math.round(durationMs / 1000)}s` : "?";
+    const status = log.scrapers_failed > 0 ? "⚠️" : "✅";
+    const errorLine = log.scraper_errors
+      ? `\n   ⚠️ <i>${escapeHtml(log.scraper_errors)}</i>`
+      : "";
+    return (
+      `${status} <b>${date}</b> (${duration})\n` +
+      `   Raw: ${log.total_raw} → Filtered: ${log.after_filters} → New: ${log.new_listings}\n` +
+      `   Scrapers: ${log.scrapers_ok}✅ ${log.scrapers_failed}❌${errorLine}`
+    );
+  });
+
+  return sendMessage(`📊 <b>Run Statistics (last ${logs.length})</b>\n\n${lines.join("\n\n")}`);
+}
+
+/**
  * Send a test/status message
  */
 export async function sendTestMessage() {
