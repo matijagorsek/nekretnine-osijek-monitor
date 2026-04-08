@@ -29,22 +29,26 @@ export function applyFilters(listings) {
       if (filters.roomsMax && l.rooms > filters.roomsMax) return false;
     }
 
-    // Location filter (if specific locations are set)
+    // Location filter (if specific locations are set, only apply to primary city)
     if (filters.locations.length > 0 && l.location) {
-      const locLower = l.location.toLowerCase();
-      const matches = filters.locations.some(
-        (fl) => locLower.includes(fl) || fl.includes(locLower)
-      );
-      if (!matches) return false;
+      if (!l.city || l.city === filters.city) {
+        const locLower = l.location.toLowerCase();
+        const matches = filters.locations.some(
+          (fl) => locLower.includes(fl) || fl.includes(locLower)
+        );
+        if (!matches) return false;
+      }
     }
 
-    // Neighborhood filter
+    // Neighborhood filter (only apply to primary city)
     if (filters.neighborhoods.length > 0 && l.location) {
-      const locLower = l.location.toLowerCase();
-      const matches = filters.neighborhoods.some(
-        (n) => locLower.includes(n) || n.includes(locLower)
-      );
-      if (!matches) return false;
+      if (!l.city || l.city === filters.city) {
+        const locLower = l.location.toLowerCase();
+        const matches = filters.neighborhoods.some(
+          (n) => locLower.includes(n) || n.includes(locLower)
+        );
+        if (!matches) return false;
+      }
     }
 
     return true;
