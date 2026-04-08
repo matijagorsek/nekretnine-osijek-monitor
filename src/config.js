@@ -37,6 +37,7 @@ export const config = {
     showRooms: process.env.NOTIFY_SHOW_ROOMS !== "false",
     showLocation: process.env.NOTIFY_SHOW_LOCATION !== "false",
     showSource: process.env.NOTIFY_SHOW_SOURCE !== "false",
+    showDescription: process.env.NOTIFY_SHOW_DESCRIPTION !== "false",
     disablePreview: process.env.NOTIFY_DISABLE_PREVIEW === "true",
     customHeader: process.env.NOTIFY_CUSTOM_HEADER || "",
   },

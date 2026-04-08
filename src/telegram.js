@@ -186,10 +186,12 @@ function formatListing(l) {
 
   const details = [price, size, rooms, location].filter(Boolean).join(" • ");
   const sourceTag = n.showSource ? ` <i>(${source})</i>` : "";
+  const description = n.showDescription && l.description ? `📝 ${escapeHtml(l.description.trim())}` : null;
 
   return [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
     details,
+    description,
     `🔗 <a href="${l.url}">Otvori oglas</a>${sourceTag}`,
   ].filter(Boolean).join("\n");
 }
