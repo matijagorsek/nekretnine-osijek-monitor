@@ -3,15 +3,28 @@ import { fetchPage, politeSleep } from "../http.js";
 
 const SOURCE = "nekretnine_hr";
 
-const SEARCH_URLS = {
-  stan: "https://www.nekretnine.hr/prodaja/stanovi/osjecko-baranjska-zupanija/osijek/",
-  kuca: "https://www.nekretnine.hr/prodaja/kuce/osjecko-baranjska-zupanija/osijek/",
+const COUNTY_MAP = {
+  osijek: "osjecko-baranjska-zupanija",
+  zagreb: "grad-zagreb",
+  split: "splitsko-dalmatinska-zupanija",
+  rijeka: "primorsko-goranska-zupanija",
+  zadar: "zadarska-zupanija",
+  pula: "istarska-zupanija",
 };
 
-export async function scrape(filterType = "all") {
+function getUrls(city) {
+  const county = COUNTY_MAP[city] || city;
+  return {
+    stan: `https://www.nekretnine.hr/prodaja/stanovi/${county}/${city}/`,
+    kuca: `https://www.nekretnine.hr/prodaja/kuce/${county}/${city}/`,
+  };
+}
+
+export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
+  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     const url = SEARCH_URLS[type];
@@ -24,7 +37,7 @@ export async function scrape(filterType = "all") {
       continue;
     }
 
-    const { listings, containerCount } = parseListings(html, type);
+    const { listings, containerCount } = parseListings(html, type, city);
     results.push(...listings);
     totalContainerCount += containerCount;
     console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
@@ -35,7 +48,7 @@ export async function scrape(filterType = "all") {
   return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type) {
+function parseListings(html, type, city) {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -61,7 +74,7 @@ function parseListings(html, type) {
         const infoText = $el.text();
         const size = extractSize(infoText);
         const rooms = extractRooms(infoText);
-        const location = extractLocation(infoText);
+        const location = extractLocation(infoText, city);
 
         const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
@@ -69,12 +82,13 @@ function parseListings(html, type) {
           id,
           source: SOURCE,
           url,
-          title: (title || "Nekretnina u Osijeku").slice(0, 200),
+          title: (title || `Nekretnina u ${city.charAt(0).toUpperCase() + city.slice(1)}`).slice(0, 200),
           price,
           size,
           rooms,
           location,
           type,
+          city,
           description: infoText.slice(0, 300),
         });
       } catch (e) {
@@ -108,12 +122,14 @@ function extractRooms(text) {
   return null;
 }
 
-function extractLocation(text) {
+function extractLocation(text, city = "osijek") {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
     "centar", "višnjevac", "tvrđa", "čepin", "josipovac",
   ];
   const lower = text.toLowerCase();
-  for (const a of areas) if (lower.includes(a)) return a;
-  return "Osijek";
+  if (city === "osijek") {
+    for (const a of areas) if (lower.includes(a)) return a;
+  }
+  return city.charAt(0).toUpperCase() + city.slice(1);
 }

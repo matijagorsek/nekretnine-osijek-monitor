@@ -47,7 +47,9 @@ export async function notifyNewListings(listings) {
   }
 
   // Header message
-  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
+  const citiesInBatch = [...new Set(listings.map((l) => l.city || "osijek"))];
+  const citiesLabel = citiesInBatch.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
+  const header = `🏠 <b>Nove nekretnine: ${citiesLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
@@ -126,10 +128,11 @@ function escapeHtml(text) {
  * Send a test/status message
  */
 export async function sendTestMessage() {
+  const citiesLabel = config.cities.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
   return sendMessage(
     "✅ <b>Nekretnine Monitor — Aktivan!</b>\n\n" +
       `⏰ Raspored: svaki dan u 12:00\n` +
-      `🏙 Grad: Osijek\n` +
+      `🏙 Gradovi: ${citiesLabel}\n` +
       `💰 Cijena: ${config.filters.priceMin.toLocaleString()} - ${config.filters.priceMax.toLocaleString()} €\n` +
       `📐 Veličina: ${config.filters.sizeMin} - ${config.filters.sizeMax} m²\n` +
       `🔍 Tip: ${config.filters.type === "all" ? "Stanovi + Kuće" : config.filters.type}\n` +

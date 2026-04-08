@@ -38,20 +38,23 @@ async function runPipeline() {
   console.log(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
   console.log(`${"=".repeat(60)}\n`);
 
-  // 1. Scrape all sources
+  // 1. Scrape all sources for each configured city
   let allListings = [];
-  for (const scraper of SCRAPERS) {
-    try {
-      console.log(`\n📡 Scraping: ${scraper.name}...`);
-      const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
-      if (listings.length === 0 && containerCount === 0) {
-        await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
-        console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
+  for (const city of config.cities) {
+    console.log(`\n🏙 Scraping city: ${city}`);
+    for (const scraper of SCRAPERS) {
+      try {
+        console.log(`\n📡 Scraping: ${scraper.name}...`);
+        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
+        if (listings.length === 0 && containerCount === 0) {
+          await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure`);
+          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken`);
+        }
+        allListings.push(...listings);
+      } catch (err) {
+        console.error(`❌ ${scraper.name} error:`, err.message);
+        await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
       }
-      allListings.push(...listings);
-    } catch (err) {
-      console.error(`❌ ${scraper.name} error:`, err.message);
-      await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
     }
   }
 

@@ -47,7 +47,8 @@ const AGENCIES = [
   },
 ];
 
-export async function scrape(filterType = "all") {
+export async function scrape(filterType = "all", city = "osijek") {
+  if (city !== "osijek") return [];
   const results = [];
   let totalContainerCount = 0;
 
@@ -120,6 +121,7 @@ function parseGenericListings(html, agency) {
         rooms,
         location,
         type,
+        city: "osijek",
         description: infoText.slice(0, 300),
       });
     } catch (e) {

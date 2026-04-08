@@ -15,6 +15,10 @@ export const config = {
 
   cron: process.env.CRON_SCHEDULE || "0 12 * * *",
 
+  cities: process.env.CITIES
+    ? process.env.CITIES.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+    : [process.env.FILTER_CITY || "osijek"],
+
   filters: {
     city: process.env.FILTER_CITY || "osijek",
     type: process.env.FILTER_TYPE || "all", // all | stan | kuca
