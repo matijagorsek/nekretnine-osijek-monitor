@@ -11,7 +11,7 @@ import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters, applySort } from "./filters.js";
+import { applyFilters, applySort, matchesTrigger } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
@@ -101,7 +101,17 @@ async function runPipeline() {
   // 4. Notify via Telegram
   if (newListings.length > 0) {
     try {
-      await notifyNewListings(newListings);
+      if (config.triggers && config.triggers.length > 0) {
+        for (const trigger of config.triggers) {
+          const matched = newListings.filter((l) => matchesTrigger(l, trigger));
+          if (matched.length > 0) {
+            console.log(`🔔 Trigger "${trigger.name}": ${matched.length} matching listings`);
+            await notifyNewListings(matched, trigger.name);
+          }
+        }
+      } else {
+        await notifyNewListings(newListings);
+      }
     } catch (err) {
       console.error("[telegram] Failed to send notifications:", err.message);
     }

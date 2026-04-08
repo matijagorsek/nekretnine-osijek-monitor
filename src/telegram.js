@@ -35,7 +35,7 @@ export async function sendMessage(text, parseMode = "HTML") {
  * Format and send new listings as Telegram notifications.
  * Groups them nicely, respects Telegram's 4096 char limit.
  */
-export async function notifyNewListings(listings) {
+export async function notifyNewListings(listings, triggerName = null) {
   if (!listings.length) {
     console.log("[telegram] No new listings to notify.");
     return;
@@ -49,7 +49,8 @@ export async function notifyNewListings(listings) {
   // Header message
   const citiesInBatch = [...new Set(listings.map((l) => l.city || "osijek"))];
   const citiesLabel = citiesInBatch.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
-  const header = `🏠 <b>Nove nekretnine: ${citiesLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
+  const triggerLabel = triggerName ? `🔔 <b>Trigger: ${escapeHtml(triggerName)}</b>\n` : "";
+  const header = `${triggerLabel}🏠 <b>Nove nekretnine: ${citiesLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
