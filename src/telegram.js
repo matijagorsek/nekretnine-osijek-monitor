@@ -97,6 +97,7 @@ function formatListing(l) {
     price,
   ];
   if (details) lines.push(details);
+  if (l.description) lines.push(`📝 <i>${escapeHtml(l.description.slice(0, 150))}</i>`);
   lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
   lines.push(`${"─".repeat(26)}`);
 
