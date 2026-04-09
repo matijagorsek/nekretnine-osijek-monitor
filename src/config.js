@@ -1,9 +1,27 @@
 import "dotenv/config";
 
 export const config = {
+  channels: (process.env.NOTIFICATION_CHANNELS || "telegram")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     chatId: process.env.TELEGRAM_CHAT_ID,
+  },
+
+  email: {
+    host: process.env.EMAIL_SMTP_HOST,
+    port: Number(process.env.EMAIL_SMTP_PORT) || 587,
+    secure: process.env.EMAIL_SMTP_SECURE === "true",
+    user: process.env.EMAIL_SMTP_USER,
+    pass: process.env.EMAIL_SMTP_PASS,
+    from: process.env.EMAIL_FROM,
+    to: process.env.EMAIL_TO,
+  },
+
+  webhook: {
+    url: process.env.WEBHOOK_URL,
+    secret: process.env.WEBHOOK_SECRET || null,
   },
 
   cron: process.env.CRON_SCHEDULE || "0 12 * * *",

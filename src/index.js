@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { logger } from "./logger.js";
 
-const REQUIRED = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
+const channels = (process.env.NOTIFICATION_CHANNELS || "telegram")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const REQUIRED = [];
+if (channels.includes("telegram")) REQUIRED.push("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID");
+if (channels.includes("email")) REQUIRED.push("EMAIL_SMTP_HOST", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS", "EMAIL_FROM", "EMAIL_TO");
+if (channels.includes("webhook")) REQUIRED.push("WEBHOOK_URL");
 const missing = REQUIRED.filter((k) => !process.env[k]);
 if (missing.length) {
   logger.error(`FATAL: missing required env vars: ${missing.join(", ")}`);
@@ -21,7 +26,7 @@ import { applyFilters, applySorting } from "./filters.js";
 import {
   notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
   startPolling, answerCallbackQuery, sendFilterStatus, sendStats,
-} from "./telegram.js";
+} from "./notifier.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -118,11 +123,11 @@ async function runPipeline() {
 
   logger.info(`✨ New unique listings: ${newListings.length}`);
 
-  // 4. Notify via Telegram
+  // 4. Notify via configured channels
   if (newListings.length > 0) {
     await notifyNewListings(newListings);
     markNotified(newListings.map((l) => l.id));
-    logger.info(`📨 Telegram notification sent!`);
+    logger.info(`📨 Notification sent (channels: ${channels.join(", ")})!`);
   } else {
     logger.info(`😴 Nema novih nekretnina danas.`);
   }
@@ -183,7 +188,9 @@ async function main() {
   }
 
   // Start polling for Telegram button callbacks (fav/unfav) and /filter commands
-  startPolling(
+  if (!channels.includes("telegram")) {
+    logger.info("📡 Telegram polling skipped (telegram not in NOTIFICATION_CHANNELS)");
+  } else startPolling(
     async (callbackQuery) => {
       const { id, data } = callbackQuery;
       if (!data) return;
