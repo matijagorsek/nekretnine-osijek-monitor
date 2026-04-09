@@ -13,21 +13,25 @@ export async function scrape(filterType = "all") {
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
 
   for (const type of types) {
-    const url = SEARCH_URLS[type];
-    if (!url) continue;
+    try {
+      const url = SEARCH_URLS[type];
+      if (!url) continue;
 
-    console.log(`[nekretnine.hr] Scraping ${type}: ${url}`);
-    const html = await fetchPage(url);
-    if (!html) {
-      console.warn(`[nekretnine.hr] Failed to fetch ${type}`);
-      continue;
+      console.log(`[nekretnine.hr] Scraping ${type}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        console.warn(`[nekretnine.hr] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const listings = parseListings(html, type);
+      results.push(...listings);
+      console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      console.error(`[nekretnine.hr] Error scraping ${type}: ${e.message}`);
     }
-
-    const listings = parseListings(html, type);
-    results.push(...listings);
-    console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return results;

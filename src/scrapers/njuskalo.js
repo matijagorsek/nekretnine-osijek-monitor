@@ -14,21 +14,25 @@ export async function scrape(filterType = "all") {
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
 
   for (const type of types) {
-    const url = SEARCH_URLS[type];
-    if (!url) continue;
+    try {
+      const url = SEARCH_URLS[type];
+      if (!url) continue;
 
-    console.log(`[njuskalo] Scraping ${type}: ${url}`);
-    const html = await fetchPage(url);
-    if (!html) {
-      console.warn(`[njuskalo] Failed to fetch ${type}`);
-      continue;
+      console.log(`[njuskalo] Scraping ${type}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        console.warn(`[njuskalo] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const listings = parseListings(html, type);
+      results.push(...listings);
+      console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      console.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
     }
-
-    const listings = parseListings(html, type);
-    results.push(...listings);
-    console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return results;
