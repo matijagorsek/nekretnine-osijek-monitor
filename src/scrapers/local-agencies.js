@@ -48,7 +48,8 @@ const AGENCIES = [
   },
 ];
 
-export async function scrape(filterType = "all") {
+export async function scrape(filterType = "all", city = "osijek") {
+  if (city !== "osijek") return [];
   const results = [];
 
   for (const agency of AGENCIES) {
@@ -156,7 +157,7 @@ function extractLocation(text) {
   ];
   const lower = text.toLowerCase();
   for (const a of areas) if (lower.includes(a)) return a;
-  return "Osijek";
+  return "Osijek"; // local-agencies are always Osijek
 }
 
 function guessType(text) {

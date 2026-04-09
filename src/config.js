@@ -9,6 +9,9 @@ export const config = {
   cron: process.env.CRON_SCHEDULE || "0 12 * * *",
 
   filters: {
+    cities: process.env.FILTER_CITIES
+      ? process.env.FILTER_CITIES.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [(process.env.FILTER_CITY || "osijek").toLowerCase()],
     city: process.env.FILTER_CITY || "osijek",
     type: process.env.FILTER_TYPE || "all", // all | stan | kuca
     priceMin: Number(process.env.FILTER_PRICE_MIN) || 0,

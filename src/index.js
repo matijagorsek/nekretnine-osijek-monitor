@@ -55,16 +55,19 @@ async function runPipeline() {
   const scraperErrors = [];
 
   for (const scraper of SCRAPERS) {
-    try {
-      logger.info(`📡 Scraping: ${scraper.name}...`);
-      const listings = await scraper.module.scrape(config.filters.type);
-      allListings.push(...listings);
-      scrapersOk++;
-      logger.info(`✅ ${scraper.name}: ${listings.length} listings`);
-    } catch (err) {
-      scrapersFailed++;
-      scraperErrors.push(`${scraper.name}: ${err.message}`);
-      logger.error(`❌ ${scraper.name} error: ${err.message}`, err.stack);
+    for (const city of config.filters.cities) {
+      try {
+        logger.info(`📡 Scraping: ${scraper.name} (${city})...`);
+        const listings = await scraper.module.scrape(config.filters.type, city);
+        listings.forEach((l) => { if (!l.city) l.city = city; });
+        allListings.push(...listings);
+        scrapersOk++;
+        logger.info(`✅ ${scraper.name} (${city}): ${listings.length} listings`);
+      } catch (err) {
+        scrapersFailed++;
+        scraperErrors.push(`${scraper.name}(${city}): ${err.message}`);
+        logger.error(`❌ ${scraper.name} (${city}) error: ${err.message}`, err.stack);
+      }
     }
   }
 

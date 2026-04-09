@@ -4,28 +4,31 @@ import { logger } from "../logger.js";
 
 const SOURCE = "crozilla";
 
-const SEARCH_URLS = {
-  stan: "https://www.crozilla.com/prodaja/stanovi/grad-osijek/",
-  kuca: "https://www.crozilla.com/prodaja/kuce/grad-osijek/",
-};
+function getSearchUrls(city) {
+  return {
+    stan: `https://www.crozilla.com/prodaja/stanovi/grad-${city}/`,
+    kuca: `https://www.crozilla.com/prodaja/kuce/grad-${city}/`,
+  };
+}
 
-export async function scrape(filterType = "all") {
+export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
+  const SEARCH_URLS = getSearchUrls(city);
 
   for (const type of types) {
     try {
       const url = SEARCH_URLS[type];
       if (!url) continue;
 
-      logger.info(`[crozilla] Scraping ${type}: ${url}`);
+      logger.info(`[crozilla] Scraping ${type} in ${city}: ${url}`);
       const html = await fetchPage(url);
       if (!html) {
         logger.warn(`[crozilla] Failed to fetch ${type}`);
         continue;
       }
 
-      const listings = parseListings(html, type);
+      const listings = parseListings(html, type, city);
       results.push(...listings);
       logger.info(`[crozilla] Found ${listings.length} ${type} listings`);
 
@@ -38,7 +41,7 @@ export async function scrape(filterType = "all") {
   return results;
 }
 
-function parseListings(html, type) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -63,7 +66,7 @@ function parseListings(html, type) {
       const infoText = $el.text();
       const size = extractSize(infoText);
       const rooms = extractRooms(infoText);
-      const location = extractLocation(infoText);
+      const location = extractLocation(infoText, city);
 
       const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
@@ -114,7 +117,7 @@ function extractRooms(text) {
   return null;
 }
 
-function extractLocation(text) {
+function extractLocation(text, city = "osijek") {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
     "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
@@ -124,5 +127,5 @@ function extractLocation(text) {
   for (const area of areas) {
     if (lower.includes(area)) return area;
   }
-  return "Osijek";
+  return city.charAt(0).toUpperCase() + city.slice(1);
 }
