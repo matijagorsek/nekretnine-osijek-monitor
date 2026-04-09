@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "njuskalo";
 
@@ -18,20 +19,20 @@ export async function scrape(filterType = "all") {
       const url = SEARCH_URLS[type];
       if (!url) continue;
 
-      console.log(`[njuskalo] Scraping ${type}: ${url}`);
+      logger.info(`[njuskalo] Scraping ${type}: ${url}`);
       const html = await fetchPage(url);
       if (!html) {
-        console.warn(`[njuskalo] Failed to fetch ${type}`);
+        logger.warn(`[njuskalo] Failed to fetch ${type}`);
         continue;
       }
 
       const listings = parseListings(html, type);
       results.push(...listings);
-      console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
+      logger.info(`[njuskalo] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
-      console.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
+      logger.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
     }
   }
 
@@ -83,7 +84,7 @@ function parseListings(html, type) {
           description: descText.slice(0, 300),
         });
       } catch (e) {
-        console.warn(`[njuskalo] Failed to parse listing: ${e.message}`);
+        logger.warn(`[njuskalo] Failed to parse listing: ${e.message}`);
       }
     }
   );

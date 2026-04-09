@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "local_agency";
 
@@ -52,21 +53,21 @@ export async function scrape(filterType = "all") {
 
   for (const agency of AGENCIES) {
     try {
-      console.log(`[local:${agency.name}] Scraping: ${agency.url}`);
+      logger.info(`[local:${agency.name}] Scraping: ${agency.url}`);
       const html = await fetchPage(agency.url);
 
       if (!html) {
-        console.warn(`[local:${agency.name}] Failed to fetch`);
+        logger.warn(`[local:${agency.name}] Failed to fetch`);
         continue;
       }
 
       const listings = parseGenericListings(html, agency);
       results.push(...listings);
-      console.log(`[local:${agency.name}] Found ${listings.length} listings`);
+      logger.info(`[local:${agency.name}] Found ${listings.length} listings`);
 
       await politeSleep(2000, 5000); // Extra polite with local agencies
     } catch (e) {
-      console.warn(`[local:${agency.name}] Error: ${e.message}`);
+      logger.error(`[local:${agency.name}] Error: ${e.message}`);
     }
   }
 
@@ -119,7 +120,7 @@ function parseGenericListings(html, agency) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      console.warn(`[local:${agencyName}] Failed to parse listing: ${e.message}`);
+      logger.warn(`[local:${agencyName}] Failed to parse listing: ${e.message}`);
     }
   });
 

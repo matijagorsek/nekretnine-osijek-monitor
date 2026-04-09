@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "oglasnik";
 
@@ -17,20 +18,20 @@ export async function scrape(filterType = "all") {
       const url = SEARCH_URLS[type];
       if (!url) continue;
 
-      console.log(`[oglasnik] Scraping ${type}: ${url}`);
+      logger.info(`[oglasnik] Scraping ${type}: ${url}`);
       const html = await fetchPage(url);
       if (!html) {
-        console.warn(`[oglasnik] Failed to fetch ${type}`);
+        logger.warn(`[oglasnik] Failed to fetch ${type}`);
         continue;
       }
 
       const listings = parseListings(html, type);
       results.push(...listings);
-      console.log(`[oglasnik] Found ${listings.length} ${type} listings`);
+      logger.info(`[oglasnik] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
-      console.error(`[oglasnik] Error scraping ${type}: ${e.message}`);
+      logger.error(`[oglasnik] Error scraping ${type}: ${e.message}`);
     }
   }
 
@@ -80,7 +81,7 @@ function parseListings(html, type) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      console.warn(`[oglasnik] Failed to parse listing: ${e.message}`);
+      logger.warn(`[oglasnik] Failed to parse listing: ${e.message}`);
     }
   });
 

@@ -1,9 +1,10 @@
 import "dotenv/config";
+import { logger } from "./logger.js";
 
 const REQUIRED = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
 const missing = REQUIRED.filter((k) => !process.env[k]);
 if (missing.length) {
-  console.error(`FATAL: missing required env vars: ${missing.join(", ")}`);
+  logger.error(`FATAL: missing required env vars: ${missing.join(", ")}`);
   process.exit(1);
 }
 
@@ -43,9 +44,9 @@ const SCRAPERS = [
 
 async function runPipeline() {
   const startedAt = new Date().toISOString();
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
-  console.log(`${"=".repeat(60)}\n`);
+  logger.info(`${"=".repeat(60)}`);
+  logger.info(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
+  logger.info(`${"=".repeat(60)}`);
 
   // 1. Scrape all sources
   let allListings = [];
@@ -55,23 +56,23 @@ async function runPipeline() {
 
   for (const scraper of SCRAPERS) {
     try {
-      console.log(`\n📡 Scraping: ${scraper.name}...`);
+      logger.info(`📡 Scraping: ${scraper.name}...`);
       const listings = await scraper.module.scrape(config.filters.type);
       allListings.push(...listings);
       scrapersOk++;
-      console.log(`   ✅ ${scraper.name}: ${listings.length} listings`);
+      logger.info(`✅ ${scraper.name}: ${listings.length} listings`);
     } catch (err) {
       scrapersFailed++;
       scraperErrors.push(`${scraper.name}: ${err.message}`);
-      console.error(`❌ ${scraper.name} error:`, err.message, err.stack);
+      logger.error(`❌ ${scraper.name} error: ${err.message}`, err.stack);
     }
   }
 
-  console.log(`\n📊 Total raw listings: ${allListings.length}`);
+  logger.info(`📊 Total raw listings: ${allListings.length}`);
 
   // 2. Apply filters and sort
   const filtered = applySorting(applyFilters(allListings));
-  console.log(`🔍 After filters: ${filtered.length}`);
+  logger.info(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones
   const newListings = [];
@@ -100,7 +101,7 @@ async function runPipeline() {
     // Check against other new listings in this batch (cross-site dedup)
     const { isDupe } = isDuplicate(listing, existingForDedup, config.dedupeThreshold);
     if (isDupe) {
-      console.log(`  🔄 Duplikat preskočen: "${listing.title}" (${listing.source})`);
+      logger.info(`🔄 Duplikat preskočen: "${listing.title}" (${listing.source})`);
       continue;
     }
 
@@ -112,15 +113,15 @@ async function runPipeline() {
     insertListing(listing);
   }
 
-  console.log(`✨ New unique listings: ${newListings.length}`);
+  logger.info(`✨ New unique listings: ${newListings.length}`);
 
   // 4. Notify via Telegram
   if (newListings.length > 0) {
     await notifyNewListings(newListings);
     markNotified(newListings.map((l) => l.id));
-    console.log(`📨 Telegram notification sent!`);
+    logger.info(`📨 Telegram notification sent!`);
   } else {
-    console.log(`😴 Nema novih nekretnina danas.`);
+    logger.info(`😴 Nema novih nekretnina danas.`);
   }
 
   // 5. Check new listings for similarity to favorites
@@ -151,12 +152,12 @@ async function runPipeline() {
     scraperErrors: scraperErrors.length > 0 ? scraperErrors.join("; ") : null,
   });
 
-  console.log(`\n📊 Run stats: ${scrapersOk} scrapers ok, ${scrapersFailed} failed`);
+  logger.info(`📊 Run stats: ${scrapersOk} scrapers ok, ${scrapersFailed} failed`);
   if (scraperErrors.length > 0) {
-    console.log(`   Errors: ${scraperErrors.join(" | ")}`);
+    logger.warn(`Errors: ${scraperErrors.join(" | ")}`);
   }
-  console.log(`   Raw: ${allListings.length} → Filtered: ${filtered.length} → New: ${newListings.length}`);
-  console.log(`\n✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
+  logger.info(`Raw: ${allListings.length} → Filtered: ${filtered.length} → New: ${newListings.length}`);
+  logger.info(`✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
 }
 
 // ─── Startup ───
@@ -167,13 +168,13 @@ async function main() {
 
   // Initialize DB
   getDb();
-  console.log("💾 Database initialized");
+  logger.info("💾 Database initialized");
 
   // Check if --run-now flag
   const runNow = process.argv.includes("--run-now");
 
   if (runNow) {
-    console.log("🚀 Running immediately (--run-now)...");
+    logger.info("🚀 Running immediately (--run-now)...");
     await runPipeline();
     process.exit(0);
   }
@@ -190,13 +191,13 @@ async function main() {
         if (listing) {
           addFavorite(listingId, listing.price);
           await answerCallbackQuery(id, "⭐ Dodano u favorite!");
-          console.log(`[favorites] Saved: ${listingId}`);
+          logger.info(`[favorites] Saved: ${listingId}`);
         }
       } else if (data.startsWith("unfav:")) {
         const listingId = data.slice(6);
         removeFavorite(listingId);
         await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
-        console.log(`[favorites] Removed: ${listingId}`);
+        logger.info(`[favorites] Removed: ${listingId}`);
       }
     },
     async (message) => {
@@ -224,28 +225,28 @@ async function main() {
         await sendFilterStatus(includes, excludes);
       } else if (sub === "add" && keyword) {
         addUserFilter("include", keyword);
-        console.log(`[filters] Include keyword added: "${keyword}"`);
+        logger.info(`[filters] Include keyword added: "${keyword}"`);
         await sendFilterStatus(
           getUserFilters("include").map((f) => f.keyword),
           getUserFilters("exclude").map((f) => f.keyword)
         );
       } else if (sub === "remove" && keyword) {
         removeUserFilter("include", keyword);
-        console.log(`[filters] Include keyword removed: "${keyword}"`);
+        logger.info(`[filters] Include keyword removed: "${keyword}"`);
         await sendFilterStatus(
           getUserFilters("include").map((f) => f.keyword),
           getUserFilters("exclude").map((f) => f.keyword)
         );
       } else if (sub === "exclude" && keyword) {
         addUserFilter("exclude", keyword);
-        console.log(`[filters] Exclude keyword added: "${keyword}"`);
+        logger.info(`[filters] Exclude keyword added: "${keyword}"`);
         await sendFilterStatus(
           getUserFilters("include").map((f) => f.keyword),
           getUserFilters("exclude").map((f) => f.keyword)
         );
       } else if (sub === "unexclude" && keyword) {
         removeUserFilter("exclude", keyword);
-        console.log(`[filters] Exclude keyword removed: "${keyword}"`);
+        logger.info(`[filters] Exclude keyword removed: "${keyword}"`);
         await sendFilterStatus(
           getUserFilters("include").map((f) => f.keyword),
           getUserFilters("exclude").map((f) => f.keyword)
@@ -255,28 +256,27 @@ async function main() {
   );
 
   // Send test message on startup
-  console.log("📡 Sending startup test message...");
+  logger.info("📡 Sending startup test message...");
   await sendTestMessage();
 
   // Schedule cron job
-  console.log(`⏰ Scheduled: "${config.cron}"`);
-  console.log(`   (Default: every day at 12:00)\n`);
+  logger.info(`⏰ Scheduled: "${config.cron}" (Default: every day at 12:00)`);
 
   cron.schedule(config.cron, async () => {
     try {
       await runPipeline();
     } catch (err) {
-      console.error("💥 Pipeline error:", err.message, err.stack);
+      logger.error(`💥 Pipeline error: ${err.message}`, err.stack);
     }
   }, {
     timezone: "Europe/Zagreb",
   });
 
-  console.log("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
-  console.log("   Tip: use 'npm run scrape' to run immediately.\n");
+  logger.info("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
+  logger.info("   Tip: use 'npm run scrape' to run immediately.");
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  logger.error(`Fatal error: ${err.message}`, err.stack);
   process.exit(1);
 });

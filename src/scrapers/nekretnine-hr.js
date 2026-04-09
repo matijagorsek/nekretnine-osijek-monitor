@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "nekretnine_hr";
 
@@ -17,20 +18,20 @@ export async function scrape(filterType = "all") {
       const url = SEARCH_URLS[type];
       if (!url) continue;
 
-      console.log(`[nekretnine.hr] Scraping ${type}: ${url}`);
+      logger.info(`[nekretnine.hr] Scraping ${type}: ${url}`);
       const html = await fetchPage(url);
       if (!html) {
-        console.warn(`[nekretnine.hr] Failed to fetch ${type}`);
+        logger.warn(`[nekretnine.hr] Failed to fetch ${type}`);
         continue;
       }
 
       const listings = parseListings(html, type);
       results.push(...listings);
-      console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
+      logger.info(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
-      console.error(`[nekretnine.hr] Error scraping ${type}: ${e.message}`);
+      logger.error(`[nekretnine.hr] Error scraping ${type}: ${e.message}`);
     }
   }
 
@@ -78,7 +79,7 @@ function parseListings(html, type) {
           description: infoText.slice(0, 300),
         });
       } catch (e) {
-        console.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
+        logger.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
       }
     }
   );

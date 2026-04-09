@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { logger } from "./logger.js";
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -44,14 +45,14 @@ export async function fetchPage(url, options = {}) {
       clearTimeout(timer);
 
       if (!resp.ok) {
-        console.warn(`[HTTP] ${url} → ${resp.status} (attempt ${attempt}/${retries})`);
+        logger.warn(`[HTTP] ${url} → ${resp.status} (attempt ${attempt}/${retries})`);
         if (attempt === retries) return null;
         continue;
       }
 
       return await resp.text();
     } catch (err) {
-      console.warn(`[HTTP] ${url} → ${err.message} (attempt ${attempt}/${retries})`);
+      logger.warn(`[HTTP] ${url} → ${err.message} (attempt ${attempt}/${retries})`);
       if (attempt === retries) return null;
     }
   }

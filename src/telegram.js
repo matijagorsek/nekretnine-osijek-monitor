@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { config } from "./config.js";
+import { logger } from "./logger.js";
 
 const API_BASE = `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -21,12 +22,12 @@ async function sendMessage(text, parseMode = "HTML") {
 
     const data = await resp.json();
     if (!data.ok) {
-      console.error("[telegram] Send failed:", data.description);
+      logger.error(`[telegram] Send failed: ${data.description}`);
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[telegram] Error:", err.message);
+    logger.error(`[telegram] Error: ${err.message}`);
     return false;
   }
 }
@@ -50,12 +51,12 @@ async function sendMessageWithKeyboard(text, inlineKeyboard, parseMode = "HTML")
 
     const data = await resp.json();
     if (!data.ok) {
-      console.error("[telegram] Send failed:", data.description);
+      logger.error(`[telegram] Send failed: ${data.description}`);
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[telegram] Error:", err.message);
+    logger.error(`[telegram] Error: ${err.message}`);
     return false;
   }
 }
@@ -71,7 +72,7 @@ export async function answerCallbackQuery(callbackQueryId, text) {
       body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
     });
   } catch (err) {
-    console.error("[telegram] answerCallbackQuery error:", err.message);
+    logger.error(`[telegram] answerCallbackQuery error: ${err.message}`);
   }
 }
 
@@ -101,25 +102,25 @@ export function startPolling(onCallbackQuery, onMessage = null) {
           offset = update.update_id + 1;
           if (update.callback_query) {
             await onCallbackQuery(update.callback_query).catch((err) =>
-              console.error("[telegram] Callback handler error:", err.message)
+              logger.error(`[telegram] Callback handler error: ${err.message}`)
             );
           }
           if (update.message && onMessage) {
             await onMessage(update.message).catch((err) =>
-              console.error("[telegram] Message handler error:", err.message)
+              logger.error(`[telegram] Message handler error: ${err.message}`)
             );
           }
         }
       }
     } catch (err) {
-      console.error("[telegram] Polling error:", err.message);
+      logger.error(`[telegram] Polling error: ${err.message}`);
       await new Promise((r) => setTimeout(r, 5000));
     }
     setImmediate(poll);
   };
 
   poll();
-  console.log("[telegram] Polling started for callback queries and messages");
+  logger.info("[telegram] Polling started for callback queries and messages");
 }
 
 /**
@@ -128,12 +129,12 @@ export function startPolling(onCallbackQuery, onMessage = null) {
  */
 export async function notifyNewListings(listings) {
   if (!listings.length) {
-    console.log("[telegram] No new listings to notify.");
+    logger.info("[telegram] No new listings to notify.");
     return;
   }
 
   if (!config.telegram.botToken || !config.telegram.chatId) {
-    console.error("[telegram] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
+    logger.error("[telegram] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
     return;
   }
 
@@ -153,7 +154,7 @@ export async function notifyNewListings(listings) {
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  console.log(`[telegram] Sent ${success}/${listings.length} listing messages`);
+  logger.info(`[telegram] Sent ${success}/${listings.length} listing messages`);
 }
 
 /**
