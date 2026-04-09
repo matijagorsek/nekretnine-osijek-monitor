@@ -87,11 +87,11 @@ async function runPipeline() {
 
     // Check DB for exact match
     if (listingExists(listing.id, fingerprint)) {
-      // Check for price drop on favorited listings
-      if (listing.price != null && isFavorite(listing.id)) {
+      // Check for price drop on all existing listings
+      if (listing.price != null) {
         const existing = getListingById(listing.id);
         if (existing && existing.price != null && listing.price < existing.price) {
-          await notifyPriceDrop(listing, existing.price);
+          await notifyPriceDrop(listing, existing.price, isFavorite(listing.id));
           await new Promise((r) => setTimeout(r, 100));
         }
         if (existing && existing.price !== listing.price) {

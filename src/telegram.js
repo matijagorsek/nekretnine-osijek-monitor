@@ -158,17 +158,21 @@ export async function notifyNewListings(listings) {
 }
 
 /**
- * Notify user that a favorited listing has dropped in price.
+ * Notify user that a listing has dropped in price.
+ * Pass isFav=true if the listing is a favorite (shows remove-from-favorites button).
  */
-export async function notifyPriceDrop(listing, oldPrice) {
+export async function notifyPriceDrop(listing, oldPrice, isFav = false) {
   const drop = oldPrice - listing.price;
   const pct = ((drop / oldPrice) * 100).toFixed(1);
+  const label = isFav ? "📉 <b>Pad cijene — omiljeni oglas!</b>" : "📉 <b>Pad cijene!</b>";
   const text =
-    `📉 <b>Pad cijene — omiljeni oglas!</b>\n\n${formatListing(listing)}\n\n` +
+    `${label}\n\n${formatListing(listing)}\n\n` +
     `💰 Stara cijena: <b>${oldPrice.toLocaleString("hr-HR")} €</b>\n` +
     `💰 Nova cijena: <b>${listing.price.toLocaleString("hr-HR")} €</b>\n` +
     `📉 Uštedite: <b>-${drop.toLocaleString("hr-HR")} € (-${pct}%)</b>`;
-  const keyboard = [[{ text: "💔 Ukloni iz favorita", callback_data: `unfav:${listing.id}` }]];
+  const keyboard = isFav
+    ? [[{ text: "💔 Ukloni iz favorita", callback_data: `unfav:${listing.id}` }]]
+    : [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${listing.id}` }]];
   return sendMessageWithKeyboard(text, keyboard);
 }
 
