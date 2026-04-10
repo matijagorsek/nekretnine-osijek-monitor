@@ -3,16 +3,22 @@ import { fetchPage, politeSleep } from "../http.js";
 
 const SOURCE = "njuskalo";
 
-// Njuškalo search URLs for Osijek
-const SEARCH_URLS = {
-  stan: "https://www.njuskalo.hr/prodaja-stanova/osijek?geo%5BlocationIds%5D=2530",
-  kuca: "https://www.njuskalo.hr/prodaja-kuca/osijek?geo%5BlocationIds%5D=2530",
-};
+const LOCATION_IDS = { osijek: 2530 };
 
-export async function scrape(filterType = "all") {
+function getUrls(city) {
+  const id = LOCATION_IDS[city];
+  const idParam = id ? `?geo%5BlocationIds%5D=${id}` : "";
+  return {
+    stan: `https://www.njuskalo.hr/prodaja-stanova/${city}${idParam}`,
+    kuca: `https://www.njuskalo.hr/prodaja-kuca/${city}${idParam}`,
+  };
+}
+
+export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
+  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     const url = SEARCH_URLS[type];
@@ -25,7 +31,7 @@ export async function scrape(filterType = "all") {
       continue;
     }
 
-    const { listings, containerCount } = parseListings(html, type);
+    const { listings, containerCount } = parseListings(html, type, city);
     results.push(...listings);
     totalContainerCount += containerCount;
     console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
@@ -36,7 +42,7 @@ export async function scrape(filterType = "all") {
   return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type) {
+function parseListings(html, type, city) {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -66,7 +72,7 @@ function parseListings(html, type) {
         // Extract size and rooms from title + description
         const size = extractSize(title + " " + descText);
         const rooms = extractRooms(title + " " + descText);
-        const location = extractLocation(title + " " + descText);
+        const location = extractLocation(title + " " + descText, city);
 
         const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
@@ -80,6 +86,7 @@ function parseListings(html, type) {
           rooms,
           location,
           type,
+          city,
           description: descText.slice(0, 300),
         });
       } catch (e) {
@@ -124,7 +131,7 @@ function extractRooms(text) {
   return null;
 }
 
-function extractLocation(text) {
+function extractLocation(text, city = "osijek") {
   const osijekAreas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
     "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
@@ -132,9 +139,11 @@ function extractLocation(text) {
   ];
 
   const lower = text.toLowerCase();
-  for (const area of osijekAreas) {
-    if (lower.includes(area)) return area;
+  if (city === "osijek") {
+    for (const area of osijekAreas) {
+      if (lower.includes(area)) return area;
+    }
   }
 
-  return "Osijek";
+  return city.charAt(0).toUpperCase() + city.slice(1);
 }

@@ -11,7 +11,7 @@ import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters } from "./filters.js";
+import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
@@ -19,12 +19,16 @@ import * as njuskalo from "./scrapers/njuskalo.js";
 import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
+import * as oglasnik from "./scrapers/oglasnik.js";
+import * as zida from "./scrapers/4zida.js";
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
   { name: "Index", module: indexOglasi },
   { name: "Nekretnine.hr", module: nekretnineHr },
   { name: "Lokalne agencije", module: localAgencies },
+  { name: "Oglasnik", module: oglasnik },
+  { name: "4zida", module: zida },
 ];
 
 // ─── Main scraping pipeline ───
@@ -34,27 +38,30 @@ async function runPipeline() {
   console.log(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
   console.log(`${"=".repeat(60)}\n`);
 
-  // 1. Scrape all sources
+  // 1. Scrape all sources for each configured city
   let allListings = [];
-  for (const scraper of SCRAPERS) {
-    try {
-      console.log(`\n📡 Scraping: ${scraper.name}...`);
-      const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
-      if (listings.length === 0 && containerCount === 0) {
-        await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
-        console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
+  for (const city of config.cities) {
+    console.log(`\n🏙 Scraping city: ${city}`);
+    for (const scraper of SCRAPERS) {
+      try {
+        console.log(`\n📡 Scraping: ${scraper.name}...`);
+        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
+        if (listings.length === 0 && containerCount === 0) {
+          await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure`);
+          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken`);
+        }
+        allListings.push(...listings);
+      } catch (err) {
+        console.error(`❌ ${scraper.name} error:`, err.message);
+        await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
       }
-      allListings.push(...listings);
-    } catch (err) {
-      console.error(`❌ ${scraper.name} error:`, err.message);
-      await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
     }
   }
 
   console.log(`\n📊 Total raw listings: ${allListings.length}`);
 
-  // 2. Apply filters
-  const filtered = applyFilters(allListings);
+  // 2. Apply filters and sort
+  const filtered = applySort(applyFilters(allListings));
   console.log(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones
@@ -82,15 +89,27 @@ async function runPipeline() {
     existingForDedup.push(listing);
 
     // Save to DB
-    insertListing(listing);
+    try {
+      insertListing(listing);
+    } catch (err) {
+      console.error(`[db] Failed to insert listing "${listing.id}":`, err.message);
+    }
   }
 
   console.log(`✨ New unique listings: ${newListings.length}`);
 
   // 4. Notify via Telegram
   if (newListings.length > 0) {
-    await notifyNewListings(newListings);
-    markNotified(newListings.map((l) => l.id));
+    try {
+      await notifyNewListings(newListings);
+    } catch (err) {
+      console.error("[telegram] Failed to send notifications:", err.message);
+    }
+    try {
+      markNotified(newListings.map((l) => l.id));
+    } catch (err) {
+      console.error("[db] Failed to mark listings as notified:", err.message);
+    }
     console.log(`📨 Telegram notification sent!`);
   } else {
     console.log(`😴 Nema novih nekretnina danas.`);
@@ -114,7 +133,12 @@ async function main() {
 
   if (runNow) {
     console.log("🚀 Running immediately (--run-now)...");
-    await runPipeline();
+    try {
+      await runPipeline();
+    } catch (err) {
+      console.error("💥 Pipeline error:", err);
+      process.exit(1);
+    }
     process.exit(0);
   }
 

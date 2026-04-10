@@ -1,18 +1,17 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
 
-const SOURCE = "index";
+const SOURCE = "4zida";
 
 function getUrls(city) {
   return {
-    stan: `https://www.index.hr/oglasi/prodaja-stanova/gp/${city}?elementsNum=25&sortby=new`,
-    kuca: `https://www.index.hr/oglasi/prodaja-kuca/gp/${city}?elementsNum=25&sortby=new`,
+    stan: `https://www.4zida.hr/prodaja-stanova/${city}`,
+    kuca: `https://www.4zida.hr/prodaja-kuca/${city}`,
   };
 }
 
 export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
-  let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
   const SEARCH_URLS = getUrls(city);
 
@@ -20,41 +19,41 @@ export async function scrape(filterType = "all", city = "osijek") {
     const url = SEARCH_URLS[type];
     if (!url) continue;
 
-    console.log(`[index] Scraping ${type}: ${url}`);
+    console.log(`[4zida] Scraping ${type}: ${url}`);
     const html = await fetchPage(url);
     if (!html) {
-      console.warn(`[index] Failed to fetch ${type}`);
+      console.warn(`[4zida] Failed to fetch ${type}`);
       continue;
     }
 
-    const { listings, containerCount } = parseListings(html, type, city);
+    const listings = parseListings(html, type, city);
     results.push(...listings);
-    totalContainerCount += containerCount;
-    console.log(`[index] Found ${listings.length} ${type} listings`);
+    console.log(`[4zida] Found ${listings.length} ${type} listings`);
 
     await politeSleep();
   }
 
-  return { listings: results, containerCount: totalContainerCount };
+  return results;
 }
 
 function parseListings(html, type, city) {
   const $ = cheerio.load(html);
   const listings = [];
 
-  // Index oglasi listing items
-  const containers = $(".OgsListing, .oglasi-list .oglas-item, [class*='listing']");
-  const containerCount = containers.length;
-  containers.each((_, el) => {
+  $(".property-card, .ad-card, .search-result-item, article[class*='property'], [class*='listing-card']").each((_, el) => {
     try {
       const $el = $(el);
 
-      const $link = $el.find("a[href*='/oglas/'], a[href*='/oglasi/']").first();
-      const title = $link.text().trim() || $el.find(".title, h3, h2").first().text().trim();
+      const $link = $el.find("a[href*='/prodaja/'], a[href*='/stan/'], a[href*='/kuca/'], a").first();
       const href = $link.attr("href");
-      if (!title || !href) return;
+      if (!href) return;
 
-      const url = href.startsWith("http") ? href : `https://www.index.hr${href}`;
+      const title =
+        $el.find(".property-title, .ad-title, h2, h3, .title").first().text().trim() ||
+        $link.text().trim();
+      if (!title || title.length < 5) return;
+
+      const url = href.startsWith("http") ? href : `https://www.4zida.hr${href}`;
 
       const priceText = $el.find(".price, [class*='price'], [class*='cijena']").first().text().trim();
       const price = parsePrice(priceText);
@@ -80,11 +79,11 @@ function parseListings(html, type, city) {
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      // Skip
+      // Skip malformed listings
     }
   });
 
-  return { listings, containerCount };
+  return listings;
 }
 
 function parsePrice(text) {
@@ -105,12 +104,11 @@ function extractSize(text) {
 }
 
 function extractRooms(text) {
-  const directMatch = text.match(/(\d+)\s*-?\s*sob/i);
-  if (directMatch) return parseInt(directMatch[1]);
+  const m = text.match(/(\d+)\s*-?\s*sob/i);
+  if (m) return parseInt(m[1]);
   const wordMap = { jednosoban: 1, dvosoban: 2, trosoban: 3, četverosoban: 4, petosoban: 5 };
-  const lower = text.toLowerCase();
-  for (const [word, num] of Object.entries(wordMap)) {
-    if (lower.includes(word)) return num;
+  for (const [w, n] of Object.entries(wordMap)) {
+    if (text.toLowerCase().includes(w)) return n;
   }
   return null;
 }
@@ -118,13 +116,12 @@ function extractRooms(text) {
 function extractLocation(text, city = "osijek") {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
-    "centar", "višnjevac", "tvrđa", "čepin", "josipovac", "briješće",
+    "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
+    "josipovac", "briješće", "brijesce", "nemetinska",
   ];
   const lower = text.toLowerCase();
   if (city === "osijek") {
-    for (const area of areas) {
-      if (lower.includes(area)) return area;
-    }
+    for (const a of areas) if (lower.includes(a)) return a;
   }
   return city.charAt(0).toUpperCase() + city.slice(1);
 }

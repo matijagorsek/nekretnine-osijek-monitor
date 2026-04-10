@@ -1,6 +1,11 @@
 import "dotenv/config";
 
-['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'].forEach(k => { if (!process.env[k]) throw new Error(`Missing required env var: ${k}`); });
+const REQUIRED_ENV_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
+const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+if (missing.length > 0) {
+  console.error(`[config] Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
 
 export const config = {
   telegram: {
@@ -9,6 +14,10 @@ export const config = {
   },
 
   cron: process.env.CRON_SCHEDULE || "0 12 * * *",
+
+  cities: process.env.CITIES
+    ? process.env.CITIES.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+    : [process.env.FILTER_CITY || "osijek"],
 
   filters: {
     city: process.env.FILTER_CITY || "osijek",
@@ -22,6 +31,11 @@ export const config = {
     locations: process.env.FILTER_LOCATIONS
       ? process.env.FILTER_LOCATIONS.split(",").map((s) => s.trim().toLowerCase())
       : [],
+    neighborhoods: process.env.FILTER_NEIGHBORHOODS
+      ? process.env.FILTER_NEIGHBORHOODS.split(",").map((s) => s.trim().toLowerCase())
+      : [],
+    sortBy: process.env.FILTER_SORT_BY || "price", // price | size | rooms | none
+    sortOrder: process.env.FILTER_SORT_ORDER || "asc", // asc | desc
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,

@@ -29,15 +29,43 @@ export function applyFilters(listings) {
       if (filters.roomsMax && l.rooms > filters.roomsMax) return false;
     }
 
-    // Location filter (if specific locations are set)
+    // Location filter (if specific locations are set, only apply to primary city)
     if (filters.locations.length > 0 && l.location) {
-      const locLower = l.location.toLowerCase();
-      const matches = filters.locations.some(
-        (fl) => locLower.includes(fl) || fl.includes(locLower)
-      );
-      if (!matches) return false;
+      if (!l.city || l.city === filters.city) {
+        const locLower = l.location.toLowerCase();
+        const matches = filters.locations.some(
+          (fl) => locLower.includes(fl) || fl.includes(locLower)
+        );
+        if (!matches) return false;
+      }
+    }
+
+    // Neighborhood filter (only apply to primary city)
+    if (filters.neighborhoods.length > 0 && l.location) {
+      if (!l.city || l.city === filters.city) {
+        const locLower = l.location.toLowerCase();
+        const matches = filters.neighborhoods.some(
+          (n) => locLower.includes(n) || n.includes(locLower)
+        );
+        if (!matches) return false;
+      }
     }
 
     return true;
+  });
+}
+
+/**
+ * Sort listings by the configured field and order.
+ */
+export function applySort(listings) {
+  const { sortBy, sortOrder } = config.filters;
+
+  if (!sortBy || sortBy === "none") return listings;
+
+  return [...listings].sort((a, b) => {
+    const aVal = a[sortBy] ?? 0;
+    const bVal = b[sortBy] ?? 0;
+    return sortOrder === "desc" ? bVal - aVal : aVal - bVal;
   });
 }
