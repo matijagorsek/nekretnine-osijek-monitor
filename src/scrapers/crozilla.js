@@ -2,18 +2,17 @@ import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
 import { logger } from "../logger.js";
 
-const SOURCE = "index";
+const SOURCE = "crozilla";
 
 function getSearchUrls(city) {
   return {
-    stan: `https://www.index.hr/oglasi/prodaja-stanova/gp/${city}?elementsNum=25&sortby=new`,
-    kuca: `https://www.index.hr/oglasi/prodaja-kuca/gp/${city}?elementsNum=25&sortby=new`,
+    stan: `https://www.crozilla.com/prodaja/stanovi/grad-${city}/`,
+    kuca: `https://www.crozilla.com/prodaja/kuce/grad-${city}/`,
   };
 }
 
 export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
-  let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
   const SEARCH_URLS = getSearchUrls(city);
 
@@ -22,45 +21,46 @@ export async function scrape(filterType = "all", city = "osijek") {
       const url = SEARCH_URLS[type];
       if (!url) continue;
 
-      logger.info(`[index] Scraping ${type} in ${city}: ${url}`);
+      logger.info(`[crozilla] Scraping ${type} in ${city}: ${url}`);
       const html = await fetchPage(url);
       if (!html) {
-        logger.warn(`[index] Failed to fetch ${type}`);
+        logger.warn(`[crozilla] Failed to fetch ${type}`);
         continue;
       }
 
       const listings = parseListings(html, type, city);
       results.push(...listings);
-      logger.info(`[index] Found ${listings.length} ${type} listings`);
+      logger.info(`[crozilla] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
-      logger.error(`[index] Error scraping ${type}: ${e.message}`);
+      logger.error(`[crozilla] Error scraping ${type}: ${e.message}`);
     }
   }
 
-  return { listings: results, containerCount: totalContainerCount };
+  return results;
 }
 
 function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
-  // Index oglasi listing items
-  const containers = $(".OgsListing, .oglasi-list .oglas-item, [class*='listing']");
-  const containerCount = containers.length;
-  containers.each((_, el) => {
+  $(".property-card, .listing-card, article, .property-item, [class*='listing-item']").each((_, el) => {
     try {
       const $el = $(el);
 
-      const $link = $el.find("a[href*='/oglas/'], a[href*='/oglasi/']").first();
-      const title = $link.text().trim() || $el.find(".title, h3, h2").first().text().trim();
+      const $link = $el.find("a[href*='/prodaja/'], a[href*='/nekretnina/'], a").first();
       const href = $link.attr("href");
-      if (!title || !href) return;
+      if (!href) return;
 
-      const url = href.startsWith("http") ? href : `https://www.index.hr${href}`;
+      const title =
+        $el.find("h2, h3, .property-title, .listing-title, .title").first().text().trim() ||
+        $link.text().trim();
+      if (!title || title.length < 5) return;
 
-      const priceText = $el.find(".price, [class*='price'], [class*='cijena']").first().text().trim();
+      const url = href.startsWith("http") ? href : `https://www.crozilla.com${href.startsWith("/") ? "" : "/"}${href}`;
+
+      const priceText = $el.find(".price, .property-price, [class*='price'], [class*='cijena']").first().text().trim();
       const price = parsePrice(priceText);
 
       const infoText = $el.text();
@@ -80,15 +80,14 @@ function parseListings(html, type, city = "osijek") {
         rooms,
         location,
         type,
-        city,
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      logger.warn(`[index] Failed to parse listing: ${e.message}`);
+      logger.warn(`[crozilla] Failed to parse listing: ${e.message}`);
     }
   });
 
-  return { listings, containerCount };
+  return listings;
 }
 
 function parsePrice(text) {
@@ -109,12 +108,11 @@ function extractSize(text) {
 }
 
 function extractRooms(text) {
-  const directMatch = text.match(/(\d+)\s*-?\s*sob/i);
-  if (directMatch) return parseInt(directMatch[1]);
+  const m = text.match(/(\d+)\s*-?\s*sob/i);
+  if (m) return parseInt(m[1]);
   const wordMap = { jednosoban: 1, dvosoban: 2, trosoban: 3, četverosoban: 4, petosoban: 5 };
-  const lower = text.toLowerCase();
-  for (const [word, num] of Object.entries(wordMap)) {
-    if (lower.includes(word)) return num;
+  for (const [w, n] of Object.entries(wordMap)) {
+    if (text.toLowerCase().includes(w)) return n;
   }
   return null;
 }
@@ -122,13 +120,12 @@ function extractRooms(text) {
 function extractLocation(text, city = "osijek") {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
-    "centar", "višnjevac", "tvrđa", "čepin", "josipovac", "briješće",
+    "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
+    "josipovac", "briješće", "brijesce", "nemetinska", "industrijsko",
   ];
   const lower = text.toLowerCase();
-  if (city === "osijek") {
-    for (const area of areas) {
-      if (lower.includes(area)) return area;
-    }
+  for (const area of areas) {
+    if (lower.includes(area)) return area;
   }
   return city.charAt(0).toUpperCase() + city.slice(1);
 }

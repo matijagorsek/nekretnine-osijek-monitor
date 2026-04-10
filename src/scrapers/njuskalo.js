@@ -1,16 +1,19 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "njuskalo";
 
-const LOCATION_IDS = { osijek: 2530 };
-
-function getUrls(city) {
-  const id = LOCATION_IDS[city];
-  const idParam = id ? `?geo%5BlocationIds%5D=${id}` : "";
+function getSearchUrls(city) {
+  if (city === "osijek") {
+    return {
+      stan: "https://www.njuskalo.hr/prodaja-stanova/osijek?geo%5BlocationIds%5D=2530",
+      kuca: "https://www.njuskalo.hr/prodaja-kuca/osijek?geo%5BlocationIds%5D=2530",
+    };
+  }
   return {
-    stan: `https://www.njuskalo.hr/prodaja-stanova/${city}${idParam}`,
-    kuca: `https://www.njuskalo.hr/prodaja-kuca/${city}${idParam}`,
+    stan: `https://www.njuskalo.hr/prodaja-stanova/${city}`,
+    kuca: `https://www.njuskalo.hr/prodaja-kuca/${city}`,
   };
 }
 
@@ -18,31 +21,34 @@ export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
-  const SEARCH_URLS = getUrls(city);
+  const SEARCH_URLS = getSearchUrls(city);
 
   for (const type of types) {
-    const url = SEARCH_URLS[type];
-    if (!url) continue;
+    try {
+      const url = SEARCH_URLS[type];
+      if (!url) continue;
 
-    console.log(`[njuskalo] Scraping ${type}: ${url}`);
-    const html = await fetchPage(url);
-    if (!html) {
-      console.warn(`[njuskalo] Failed to fetch ${type}`);
-      continue;
+      logger.info(`[njuskalo] Scraping ${type} in ${city}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        logger.warn(`[njuskalo] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const listings = parseListings(html, type, city);
+      results.push(...listings);
+      logger.info(`[njuskalo] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      logger.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
     }
-
-    const { listings, containerCount } = parseListings(html, type, city);
-    results.push(...listings);
-    totalContainerCount += containerCount;
-    console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type, city) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -90,7 +96,7 @@ function parseListings(html, type, city) {
           description: descText.slice(0, 300),
         });
       } catch (e) {
-        // Skip malformed listings
+        logger.warn(`[njuskalo] Failed to parse listing: ${e.message}`);
       }
     }
   );

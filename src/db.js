@@ -32,6 +32,31 @@ function migrate() {
       notified INTEGER DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS favorites (
+      listing_id TEXT PRIMARY KEY,
+      saved_price REAL,
+      added_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_filters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('include', 'exclude')),
+      keyword TEXT NOT NULL,
+      UNIQUE(type, keyword)
+    );
+
+    CREATE TABLE IF NOT EXISTS run_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      scrapers_ok INTEGER DEFAULT 0,
+      scrapers_failed INTEGER DEFAULT 0,
+      total_raw INTEGER DEFAULT 0,
+      after_filters INTEGER DEFAULT 0,
+      new_listings INTEGER DEFAULT 0,
+      scraper_errors TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
@@ -87,6 +112,105 @@ export function getUnnotified() {
   return db
     .prepare(
       "SELECT * FROM listings WHERE notified = 0 ORDER BY first_seen DESC"
+    )
+    .all();
+}
+
+/**
+ * Get a single listing by id
+ */
+export function getListingById(id) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM listings WHERE id = ?").get(id);
+}
+
+/**
+ * Update the stored price of an existing listing
+ */
+export function updateListingPrice(id, newPrice) {
+  const db = getDb();
+  db.prepare("UPDATE listings SET price = ? WHERE id = ?").run(newPrice, id);
+}
+
+/**
+ * Add a listing to favorites
+ */
+export function addFavorite(listingId, price) {
+  const db = getDb();
+  db.prepare(
+    "INSERT OR REPLACE INTO favorites (listing_id, saved_price) VALUES (?, ?)"
+  ).run(listingId, price ?? null);
+}
+
+/**
+ * Remove a listing from favorites
+ */
+export function removeFavorite(listingId) {
+  const db = getDb();
+  db.prepare("DELETE FROM favorites WHERE listing_id = ?").run(listingId);
+}
+
+/**
+ * Check if a listing is a favorite
+ */
+export function isFavorite(listingId) {
+  const db = getDb();
+  return !!db.prepare("SELECT 1 FROM favorites WHERE listing_id = ?").get(listingId);
+}
+
+/**
+ * Add a user-defined keyword filter
+ */
+export function addUserFilter(type, keyword) {
+  const db = getDb();
+  db.prepare("INSERT OR IGNORE INTO user_filters (type, keyword) VALUES (?, ?)").run(type, keyword.toLowerCase().trim());
+}
+
+/**
+ * Remove a user-defined keyword filter
+ */
+export function removeUserFilter(type, keyword) {
+  const db = getDb();
+  db.prepare("DELETE FROM user_filters WHERE type = ? AND keyword = ?").run(type, keyword.toLowerCase().trim());
+}
+
+/**
+ * Get all user-defined keyword filters, optionally by type
+ */
+export function getUserFilters(type) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM user_filters WHERE type = ? ORDER BY keyword").all(type);
+}
+
+/**
+ * Record a pipeline run's statistics
+ */
+export function recordRunLog(log) {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO run_logs (started_at, finished_at, scrapers_ok, scrapers_failed, total_raw, after_filters, new_listings, scraper_errors)
+     VALUES (@startedAt, @finishedAt, @scrapersOk, @scrapersFailed, @totalRaw, @afterFilters, @newListings, @scraperErrors)`
+  ).run(log);
+}
+
+/**
+ * Get the most recent pipeline run logs
+ */
+export function getRecentRunLogs(limit = 10) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM run_logs ORDER BY id DESC LIMIT ?").all(limit);
+}
+
+/**
+ * Get all favorited listings with their full data
+ */
+export function getFavorites() {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT l.*, f.saved_price AS fav_saved_price, f.added_at AS fav_added_at
+       FROM favorites f
+       JOIN listings l ON l.id = f.listing_id`
     )
     .all();
 }

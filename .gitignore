@@ -1,6 +1,17 @@
 .env
 core.*
 node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Core dumps
+core
+core.*
+
+# OS
+.DS_Store
 *.log
 data/
 

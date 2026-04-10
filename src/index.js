@@ -1,18 +1,32 @@
-import 'dotenv/config';
-const REQUIRED = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
-const missing = REQUIRED.filter(k => !process.env[k]);
+import "dotenv/config";
+import { logger } from "./logger.js";
+
+const channels = (process.env.NOTIFICATION_CHANNELS || "telegram")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const REQUIRED = [];
+if (channels.includes("telegram")) REQUIRED.push("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID");
+if (channels.includes("email")) REQUIRED.push("EMAIL_SMTP_HOST", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS", "EMAIL_FROM", "EMAIL_TO");
+if (channels.includes("webhook")) REQUIRED.push("WEBHOOK_URL");
+const missing = REQUIRED.filter((k) => !process.env[k]);
 if (missing.length) {
-  console.error(`FATAL: missing required env vars: ${missing.join(', ')}`);
+  logger.error(`FATAL: missing required env vars: ${missing.join(", ")}`);
   process.exit(1);
 }
 
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
-import { getDb, listingExists, insertListing, markNotified, getUnnotified } from "./db.js";
+import {
+  getDb, listingExists, insertListing, markNotified, getUnnotified,
+  getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites,
+  addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs,
+} from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters, applySort } from "./filters.js";
-import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
+import { applyFilters, applySorting } from "./filters.js";
+import {
+  notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
+  startPolling, answerCallbackQuery, sendFilterStatus, sendStats,
+} from "./notifier.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -20,7 +34,7 @@ import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
 import * as oglasnik from "./scrapers/oglasnik.js";
-import * as zida from "./scrapers/4zida.js";
+import * as crozilla from "./scrapers/crozilla.js";
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
@@ -28,41 +42,45 @@ const SCRAPERS = [
   { name: "Nekretnine.hr", module: nekretnineHr },
   { name: "Lokalne agencije", module: localAgencies },
   { name: "Oglasnik", module: oglasnik },
-  { name: "4zida", module: zida },
+  { name: "Crozilla", module: crozilla },
 ];
 
 // ─── Main scraping pipeline ───
 
 async function runPipeline() {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
-  console.log(`${"=".repeat(60)}\n`);
+  const startedAt = new Date().toISOString();
+  logger.info(`${"=".repeat(60)}`);
+  logger.info(`🏠 Nekretnine Monitor — ${new Date().toLocaleString("hr-HR")}`);
+  logger.info(`${"=".repeat(60)}`);
 
   // 1. Scrape all sources for each configured city
   let allListings = [];
-  for (const city of config.cities) {
-    console.log(`\n🏙 Scraping city: ${city}`);
-    for (const scraper of SCRAPERS) {
+  let scrapersOk = 0;
+  let scrapersFailed = 0;
+  const scraperErrors = [];
+
+  for (const scraper of SCRAPERS) {
+    for (const city of config.filters.cities) {
       try {
-        console.log(`\n📡 Scraping: ${scraper.name}...`);
-        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
-        if (listings.length === 0 && containerCount === 0) {
-          await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure`);
-          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken`);
-        }
+        logger.info(`📡 Scraping: ${scraper.name} (${city})...`);
+        const listings = await scraper.module.scrape(config.filters.type, city);
+        listings.forEach((l) => { if (!l.city) l.city = city; });
         allListings.push(...listings);
+        scrapersOk++;
+        logger.info(`✅ ${scraper.name} (${city}): ${listings.length} listings`);
       } catch (err) {
-        console.error(`❌ ${scraper.name} error:`, err.message);
-        await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
+        scrapersFailed++;
+        scraperErrors.push(`${scraper.name}(${city}): ${err.message}`);
+        logger.error(`❌ ${scraper.name} (${city}) error: ${err.message}`, err.stack);
       }
     }
   }
 
-  console.log(`\n📊 Total raw listings: ${allListings.length}`);
+  logger.info(`📊 Total raw listings: ${allListings.length}`);
 
   // 2. Apply filters and sort
-  const filtered = applySort(applyFilters(allListings));
-  console.log(`🔍 After filters: ${filtered.length}`);
+  const filtered = applySorting(applyFilters(allListings));
+  logger.info(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones
   const newListings = [];
@@ -74,13 +92,24 @@ async function runPipeline() {
 
     // Check DB for exact match
     if (listingExists(listing.id, fingerprint)) {
+      // Check for price drop on all existing listings
+      if (listing.price != null) {
+        const existing = getListingById(listing.id);
+        if (existing && existing.price != null && listing.price < existing.price) {
+          await notifyPriceDrop(listing, existing.price, isFavorite(listing.id));
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (existing && existing.price !== listing.price) {
+          updateListingPrice(listing.id, listing.price);
+        }
+      }
       continue;
     }
 
     // Check against other new listings in this batch (cross-site dedup)
     const { isDupe } = isDuplicate(listing, existingForDedup, config.dedupeThreshold);
     if (isDupe) {
-      console.log(`  🔄 Duplikat preskočen: "${listing.title}" (${listing.source})`);
+      logger.info(`🔄 Duplikat preskočen: "${listing.title}" (${listing.source})`);
       continue;
     }
 
@@ -96,26 +125,51 @@ async function runPipeline() {
     }
   }
 
-  console.log(`✨ New unique listings: ${newListings.length}`);
+  logger.info(`✨ New unique listings: ${newListings.length}`);
 
-  // 4. Notify via Telegram
+  // 4. Notify via configured channels
   if (newListings.length > 0) {
-    try {
-      await notifyNewListings(newListings);
-    } catch (err) {
-      console.error("[telegram] Failed to send notifications:", err.message);
-    }
-    try {
-      markNotified(newListings.map((l) => l.id));
-    } catch (err) {
-      console.error("[db] Failed to mark listings as notified:", err.message);
-    }
-    console.log(`📨 Telegram notification sent!`);
+    await notifyNewListings(newListings);
+    markNotified(newListings.map((l) => l.id));
+    logger.info(`📨 Notification sent (channels: ${channels.join(", ")})!`);
   } else {
-    console.log(`😴 Nema novih nekretnina danas.`);
+    logger.info(`😴 Nema novih nekretnina danas.`);
   }
 
-  console.log(`\n✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
+  // 5. Check new listings for similarity to favorites
+  const favorites = getFavorites();
+  if (favorites.length > 0 && newListings.length > 0) {
+    for (const newListing of newListings) {
+      for (const fav of favorites) {
+        if (newListing.id === fav.id) continue;
+        const { isDupe, matchedWith } = isDuplicate(newListing, [fav], config.dedupeThreshold);
+        if (isDupe) {
+          await notifySimilarListing(newListing, matchedWith);
+          await new Promise((r) => setTimeout(r, 100));
+          break;
+        }
+      }
+    }
+  }
+
+  const finishedAt = new Date().toISOString();
+  recordRunLog({
+    startedAt,
+    finishedAt,
+    scrapersOk,
+    scrapersFailed,
+    totalRaw: allListings.length,
+    afterFilters: filtered.length,
+    newListings: newListings.length,
+    scraperErrors: scraperErrors.length > 0 ? scraperErrors.join("; ") : null,
+  });
+
+  logger.info(`📊 Run stats: ${scrapersOk} scrapers ok, ${scrapersFailed} failed`);
+  if (scraperErrors.length > 0) {
+    logger.warn(`Errors: ${scraperErrors.join(" | ")}`);
+  }
+  logger.info(`Raw: ${allListings.length} → Filtered: ${filtered.length} → New: ${newListings.length}`);
+  logger.info(`✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
 }
 
 // ─── Startup ───
@@ -126,45 +180,129 @@ async function main() {
 
   // Initialize DB
   getDb();
-  console.log("💾 Database initialized");
+  logger.info("💾 Database initialized");
 
   // Check if --run-now flag
   const runNow = process.argv.includes("--run-now");
 
   if (runNow) {
-    console.log("🚀 Running immediately (--run-now)...");
-    try {
-      await runPipeline();
-    } catch (err) {
-      console.error("💥 Pipeline error:", err);
-      process.exit(1);
-    }
+    logger.info("🚀 Running immediately (--run-now)...");
+    await runPipeline();
     process.exit(0);
   }
 
+  // Start polling for Telegram button callbacks (fav/unfav) and /filter commands
+  if (!channels.includes("telegram")) {
+    logger.info("📡 Telegram polling skipped (telegram not in NOTIFICATION_CHANNELS)");
+  } else startPolling(
+    async (callbackQuery) => {
+      const { id, data } = callbackQuery;
+      if (!data) return;
+
+      if (data.startsWith("fav:")) {
+        const listingId = data.slice(4);
+        const listing = getListingById(listingId);
+        if (listing) {
+          addFavorite(listingId, listing.price);
+          await answerCallbackQuery(id, "⭐ Dodano u favorite!");
+          logger.info(`[favorites] Saved: ${listingId}`);
+        }
+      } else if (data.startsWith("unfav:")) {
+        const listingId = data.slice(6);
+        removeFavorite(listingId);
+        await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
+        logger.info(`[favorites] Removed: ${listingId}`);
+      }
+    },
+    async (message) => {
+      const text = message.text || "";
+      const chatId = String(message.chat?.id);
+
+      // Only respond to the configured chat
+      if (chatId !== config.telegram.chatId) return;
+
+      if (text === "/stats") {
+        const logs = getRecentRunLogs(5);
+        await sendStats(logs);
+        return;
+      }
+
+      if (!text.startsWith("/filter")) return;
+
+      const parts = text.trim().split(/\s+/);
+      const sub = parts[1]; // add | remove | exclude | unexclude | list
+      const keyword = parts.slice(2).join(" ").toLowerCase().trim();
+
+      if (sub === "list") {
+        const includes = getUserFilters("include").map((f) => f.keyword);
+        const excludes = getUserFilters("exclude").map((f) => f.keyword);
+        await sendFilterStatus(includes, excludes);
+      } else if (sub === "add" && keyword) {
+        addUserFilter("include", keyword);
+        logger.info(`[filters] Include keyword added: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "remove" && keyword) {
+        removeUserFilter("include", keyword);
+        logger.info(`[filters] Include keyword removed: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "exclude" && keyword) {
+        addUserFilter("exclude", keyword);
+        logger.info(`[filters] Exclude keyword added: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      } else if (sub === "unexclude" && keyword) {
+        removeUserFilter("exclude", keyword);
+        logger.info(`[filters] Exclude keyword removed: "${keyword}"`);
+        await sendFilterStatus(
+          getUserFilters("include").map((f) => f.keyword),
+          getUserFilters("exclude").map((f) => f.keyword)
+        );
+      }
+    }
+  );
+
   // Send test message on startup
-  console.log("📡 Sending startup test message...");
+  logger.info("📡 Sending startup test message...");
   await sendTestMessage();
 
   // Schedule cron job
-  console.log(`⏰ Scheduled: "${config.cron}"`);
-  console.log(`   (Default: every day at 12:00)\n`);
+  logger.info(`⏰ Scheduled: "${config.cron}" (Default: every day at 12:00)`);
 
   cron.schedule(config.cron, async () => {
     try {
       await runPipeline();
     } catch (err) {
-      console.error("💥 Pipeline error:", err);
+      logger.error(`💥 Pipeline error: ${err.message}`, err.stack);
     }
   }, {
     timezone: "Europe/Zagreb",
   });
 
-  console.log("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
-  console.log("   Tip: use 'npm run scrape' to run immediately.\n");
+  logger.info("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
+  logger.info("   Tip: use 'npm run scrape' to run immediately.");
 }
 
+process.on("uncaughtException", (err) => {
+  logger.error(`Uncaught exception: ${err.message}`, err.stack);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  logger.error(`Unhandled rejection: ${msg}`, stack);
+  process.exit(1);
+});
+
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  logger.error(`Fatal error: ${err.message}`, err.stack);
   process.exit(1);
 });

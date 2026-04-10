@@ -1,22 +1,19 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "nekretnine_hr";
 
-const COUNTY_MAP = {
-  osijek: "osjecko-baranjska-zupanija",
-  zagreb: "grad-zagreb",
-  split: "splitsko-dalmatinska-zupanija",
-  rijeka: "primorsko-goranska-zupanija",
-  zadar: "zadarska-zupanija",
-  pula: "istarska-zupanija",
-};
-
-function getUrls(city) {
-  const county = COUNTY_MAP[city] || city;
+function getSearchUrls(city) {
+  if (city === "osijek") {
+    return {
+      stan: "https://www.nekretnine.hr/prodaja/stanovi/osjecko-baranjska-zupanija/osijek/",
+      kuca: "https://www.nekretnine.hr/prodaja/kuce/osjecko-baranjska-zupanija/osijek/",
+    };
+  }
   return {
-    stan: `https://www.nekretnine.hr/prodaja/stanovi/${county}/${city}/`,
-    kuca: `https://www.nekretnine.hr/prodaja/kuce/${county}/${city}/`,
+    stan: `https://www.nekretnine.hr/prodaja/stanovi/${city}/`,
+    kuca: `https://www.nekretnine.hr/prodaja/kuce/${city}/`,
   };
 }
 
@@ -24,31 +21,34 @@ export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
-  const SEARCH_URLS = getUrls(city);
+  const SEARCH_URLS = getSearchUrls(city);
 
   for (const type of types) {
-    const url = SEARCH_URLS[type];
-    if (!url) continue;
+    try {
+      const url = SEARCH_URLS[type];
+      if (!url) continue;
 
-    console.log(`[nekretnine.hr] Scraping ${type}: ${url}`);
-    const html = await fetchPage(url);
-    if (!html) {
-      console.warn(`[nekretnine.hr] Failed to fetch ${type}`);
-      continue;
+      logger.info(`[nekretnine.hr] Scraping ${type} in ${city}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        logger.warn(`[nekretnine.hr] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const listings = parseListings(html, type, city);
+      results.push(...listings);
+      logger.info(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      logger.error(`[nekretnine.hr] Error scraping ${type}: ${e.message}`);
     }
-
-    const { listings, containerCount } = parseListings(html, type, city);
-    results.push(...listings);
-    totalContainerCount += containerCount;
-    console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type, city) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -75,6 +75,7 @@ function parseListings(html, type, city) {
         const size = extractSize(infoText);
         const rooms = extractRooms(infoText);
         const location = extractLocation(infoText, city);
+        const cityLabel = city.charAt(0).toUpperCase() + city.slice(1);
 
         const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
@@ -82,7 +83,7 @@ function parseListings(html, type, city) {
           id,
           source: SOURCE,
           url,
-          title: (title || `Nekretnina u ${city.charAt(0).toUpperCase() + city.slice(1)}`).slice(0, 200),
+          title: (title || `Nekretnina u ${cityLabel}`).slice(0, 200),
           price,
           size,
           rooms,
@@ -92,7 +93,7 @@ function parseListings(html, type, city) {
           description: infoText.slice(0, 300),
         });
       } catch (e) {
-        // Skip
+        logger.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
       }
     }
   );
@@ -128,8 +129,6 @@ function extractLocation(text, city = "osijek") {
     "centar", "višnjevac", "tvrđa", "čepin", "josipovac",
   ];
   const lower = text.toLowerCase();
-  if (city === "osijek") {
-    for (const a of areas) if (lower.includes(a)) return a;
-  }
+  for (const a of areas) if (lower.includes(a)) return a;
   return city.charAt(0).toUpperCase() + city.slice(1);
 }

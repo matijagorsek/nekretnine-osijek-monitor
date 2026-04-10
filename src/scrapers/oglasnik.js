@@ -1,59 +1,65 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "oglasnik";
 
-function getUrls(city) {
+function getSearchUrls(city) {
   return {
-    stan: `https://www.oglasnik.hr/nekretnine/stambeni-prostori/stanovi/prodaja/?location=${city}`,
-    kuca: `https://www.oglasnik.hr/nekretnine/kuce/prodaja/?location=${city}`,
+    stan: `https://www.oglasnik.hr/stanovi/prodaja/${city}/?sort=new`,
+    kuca: `https://www.oglasnik.hr/kuce/prodaja/${city}/?sort=new`,
   };
 }
 
 export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
-  const SEARCH_URLS = getUrls(city);
+  const SEARCH_URLS = getSearchUrls(city);
 
   for (const type of types) {
-    const url = SEARCH_URLS[type];
-    if (!url) continue;
+    try {
+      const url = SEARCH_URLS[type];
+      if (!url) continue;
 
-    console.log(`[oglasnik] Scraping ${type}: ${url}`);
-    const html = await fetchPage(url);
-    if (!html) {
-      console.warn(`[oglasnik] Failed to fetch ${type}`);
-      continue;
+      logger.info(`[oglasnik] Scraping ${type} in ${city}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        logger.warn(`[oglasnik] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const listings = parseListings(html, type, city);
+      results.push(...listings);
+      logger.info(`[oglasnik] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      logger.error(`[oglasnik] Error scraping ${type}: ${e.message}`);
     }
-
-    const listings = parseListings(html, type, city);
-    results.push(...listings);
-    console.log(`[oglasnik] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return results;
 }
 
-function parseListings(html, type, city) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
-  $(".oglas-item, .listing-item, .ad-item, article.oglas, [class*='oglas-']").each((_, el) => {
+  $(".oglas, .listing-item, article.ad, [class*='oglas-item'], .advert").each((_, el) => {
     try {
       const $el = $(el);
 
-      const $link = $el.find("a[href*='/oglas/'], a[href*='/nekretnin'], a.title-link, h2 a, h3 a").first();
+      const $link = $el.find("a[href*='/oglas/'], a[href*='/nekretnine/'], a").first();
       const href = $link.attr("href");
       if (!href) return;
 
       const title =
-        $el.find(".oglas-title, .title, h2, h3").first().text().trim() ||
+        $el.find("h2, h3, .title, .oglas-title, .name").first().text().trim() ||
+        $link.attr("title") ||
         $link.text().trim();
       if (!title || title.length < 5) return;
 
-      const url = href.startsWith("http") ? href : `https://www.oglasnik.hr${href}`;
+      const url = href.startsWith("http") ? href : `https://www.oglasnik.hr${href.startsWith("/") ? "" : "/"}${href}`;
 
       const priceText = $el.find(".price, .cijena, [class*='price'], [class*='cijena']").first().text().trim();
       const price = parsePrice(priceText);
@@ -75,11 +81,10 @@ function parseListings(html, type, city) {
         rooms,
         location,
         type,
-        city,
         description: infoText.slice(0, 300),
       });
     } catch (e) {
-      // Skip malformed listings
+      logger.warn(`[oglasnik] Failed to parse listing: ${e.message}`);
     }
   });
 
@@ -117,11 +122,11 @@ function extractLocation(text, city = "osijek") {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
     "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
-    "josipovac", "briješće", "brijesce", "nemetinska",
+    "josipovac", "briješće", "brijesce", "nemetinska", "industrijsko",
   ];
   const lower = text.toLowerCase();
-  if (city === "osijek") {
-    for (const a of areas) if (lower.includes(a)) return a;
+  for (const area of areas) {
+    if (lower.includes(area)) return area;
   }
   return city.charAt(0).toUpperCase() + city.slice(1);
 }
