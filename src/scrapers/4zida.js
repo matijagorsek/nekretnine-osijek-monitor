@@ -3,17 +3,14 @@ import { fetchPage, politeSleep } from "../http.js";
 
 const SOURCE = "4zida";
 
-function getUrls(city) {
-  return {
-    stan: `https://www.4zida.hr/prodaja-stanova/${city}`,
-    kuca: `https://www.4zida.hr/prodaja-kuca/${city}`,
-  };
-}
+const SEARCH_URLS = {
+  stan: "https://www.4zida.hr/prodaja-stanova/osijek",
+  kuca: "https://www.4zida.hr/prodaja-kuca/osijek",
+};
 
-export async function scrape(filterType = "all", city = "osijek") {
+export async function scrape(filterType = "all") {
   const results = [];
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
-  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     const url = SEARCH_URLS[type];
@@ -26,7 +23,7 @@ export async function scrape(filterType = "all", city = "osijek") {
       continue;
     }
 
-    const listings = parseListings(html, type, city);
+    const listings = parseListings(html, type);
     results.push(...listings);
     console.log(`[4zida] Found ${listings.length} ${type} listings`);
 
@@ -36,7 +33,7 @@ export async function scrape(filterType = "all", city = "osijek") {
   return results;
 }
 
-function parseListings(html, type, city) {
+function parseListings(html, type) {
   const $ = cheerio.load(html);
   const listings = [];
 
@@ -61,7 +58,7 @@ function parseListings(html, type, city) {
       const infoText = $el.text();
       const size = extractSize(infoText);
       const rooms = extractRooms(infoText);
-      const location = extractLocation(infoText, city);
+      const location = extractLocation(infoText);
 
       const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
@@ -75,7 +72,6 @@ function parseListings(html, type, city) {
         rooms,
         location,
         type,
-        city,
         description: infoText.slice(0, 300),
       });
     } catch (e) {
@@ -113,15 +109,13 @@ function extractRooms(text) {
   return null;
 }
 
-function extractLocation(text, city = "osijek") {
+function extractLocation(text) {
   const areas = [
     "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
     "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
     "josipovac", "briješće", "brijesce", "nemetinska",
   ];
   const lower = text.toLowerCase();
-  if (city === "osijek") {
-    for (const a of areas) if (lower.includes(a)) return a;
-  }
-  return city.charAt(0).toUpperCase() + city.slice(1);
+  for (const a of areas) if (lower.includes(a)) return a;
+  return "Osijek";
 }

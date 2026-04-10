@@ -18,8 +18,8 @@ import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters, applySort, matchesTrigger } from "./filters.js";
-import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, sendTestMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -131,17 +131,7 @@ async function runPipeline() {
   // 4. Notify via configured channels
   if (newListings.length > 0) {
     try {
-      if (config.triggers && config.triggers.length > 0) {
-        for (const trigger of config.triggers) {
-          const matched = newListings.filter((l) => matchesTrigger(l, trigger));
-          if (matched.length > 0) {
-            console.log(`🔔 Trigger "${trigger.name}": ${matched.length} matching listings`);
-            await notifyNewListings(matched, trigger.name);
-          }
-        }
-      } else {
-        await notifyNewListings(newListings);
-      }
+      await notifyNewListings(newListings);
     } catch (err) {
       console.error("[telegram] Failed to send notifications:", err.message);
     }

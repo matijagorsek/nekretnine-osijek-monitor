@@ -139,10 +139,7 @@ export async function notifyNewListings(listings, triggerName = null) {
   }
 
   // Header message
-  const citiesInBatch = [...new Set(listings.map((l) => l.city || "osijek"))];
-  const citiesLabel = citiesInBatch.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
-  const triggerLabel = triggerName ? `🔔 <b>Trigger: ${escapeHtml(triggerName)}</b>\n` : "";
-  const header = `${triggerLabel}🏠 <b>Nove nekretnine: ${citiesLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
+  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
@@ -222,7 +219,6 @@ function formatListing(l) {
     price,
   ];
   if (details) lines.push(details);
-  if (l.description) lines.push(`📝 <i>${escapeHtml(l.description.slice(0, 150))}</i>`);
   lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
   lines.push(`${"─".repeat(26)}`);
 
