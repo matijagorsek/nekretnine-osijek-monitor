@@ -38,7 +38,7 @@ export async function scrape(filterType = "all", city = "osijek") {
       logger.error(`[index] Error scraping ${type}: ${e.message}`);
     }
 
-    const { listings, containerCount } = parseListings(html, type, city);
+    const { listings, containerCount } = parseListings(html, type);
     results.push(...listings);
     totalContainerCount += containerCount;
     console.log(`[index] Found ${listings.length} ${type} listings`);

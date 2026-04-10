@@ -1,15 +1,8 @@
-import "dotenv/config";
-import { logger } from "./logger.js";
-
-const channels = (process.env.NOTIFICATION_CHANNELS || "telegram")
-  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-const REQUIRED = [];
-if (channels.includes("telegram")) REQUIRED.push("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID");
-if (channels.includes("email")) REQUIRED.push("EMAIL_SMTP_HOST", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS", "EMAIL_FROM", "EMAIL_TO");
-if (channels.includes("webhook")) REQUIRED.push("WEBHOOK_URL");
-const missing = REQUIRED.filter((k) => !process.env[k]);
+import 'dotenv/config';
+const REQUIRED = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
+const missing = REQUIRED.filter(k => !process.env[k]);
 if (missing.length) {
-  logger.error(`FATAL: missing required env vars: ${missing.join(", ")}`);
+  console.error(`FATAL: missing required env vars: ${missing.join(', ')}`);
   process.exit(1);
 }
 
@@ -18,8 +11,8 @@ import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters, applySort } from "./filters.js";
-import { notifyNewListings, sendTestMessage } from "./telegram.js";
+import { applyFilters } from "./filters.js";
+import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -48,32 +41,18 @@ async function runPipeline() {
 
   // 1. Scrape all sources for each configured city
   let allListings = [];
-  for (const city of config.cities) {
-    console.log(`\n🏙 Scraping city: ${city}`);
-    for (const scraper of SCRAPERS) {
-      try {
-        console.log(`\n📡 Scraping: ${scraper.name}...`);
-        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
-        if (listings.length === 0 && containerCount === 0) {
-          const healthKey = `${scraper.name}:${city}`;
-          const failures = recordScraperFailure(healthKey);
-          if (failures >= 3) {
-            await sendMessage(`🚨 ${scraper.name} (${city}): selector failure for ${failures} consecutive runs — website structure may have changed, manual selector update required`);
-          } else {
-            await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure (consecutive failure #${failures})`);
-          }
-          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken (consecutive failure #${failures})`);
-        } else {
-          const recovered = recordScraperSuccess(`${scraper.name}:${city}`);
-          if (recovered) {
-            await sendMessage(`✅ ${scraper.name} (${city}): selectors recovered and working again`);
-          }
-        }
-        allListings.push(...listings);
-      } catch (err) {
-        console.error(`❌ ${scraper.name} error:`, err.message);
-        await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
+  for (const scraper of SCRAPERS) {
+    try {
+      console.log(`\n📡 Scraping: ${scraper.name}...`);
+      const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
+      if (listings.length === 0 && containerCount === 0) {
+        await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
+        console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
       }
+      allListings.push(...listings);
+    } catch (err) {
+      console.error(`❌ ${scraper.name} error:`, err.message);
+      await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
     }
   }
 

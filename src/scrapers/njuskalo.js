@@ -42,7 +42,7 @@ export async function scrape(filterType = "all", city = "osijek") {
       logger.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
     }
 
-    const { listings, containerCount } = parseListings(html, type, city);
+    const { listings, containerCount } = parseListings(html, type);
     results.push(...listings);
     totalContainerCount += containerCount;
     console.log(`[njuskalo] Found ${listings.length} ${type} listings`);

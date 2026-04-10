@@ -65,7 +65,8 @@ export async function scrape(filterType = "all", city = "osijek") {
 
       const { listings, containerCount } = parseGenericListings(html, agency);
       results.push(...listings);
-      logger.info(`[local:${agency.name}] Found ${listings.length} listings`);
+      totalContainerCount += containerCount;
+      console.log(`[local:${agency.name}] Found ${listings.length} listings`);
 
       await politeSleep(2000, 5000); // Extra polite with local agencies
     } catch (e) {
