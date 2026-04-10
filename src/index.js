@@ -286,6 +286,18 @@ async function main() {
   logger.info("   Tip: use 'npm run scrape' to run immediately.");
 }
 
+process.on("uncaughtException", (err) => {
+  logger.error(`Uncaught exception: ${err.message}`, err.stack);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  logger.error(`Unhandled rejection: ${msg}`, stack);
+  process.exit(1);
+});
+
 main().catch((err) => {
   logger.error(`Fatal error: ${err.message}`, err.stack);
   process.exit(1);
