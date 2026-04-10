@@ -54,29 +54,25 @@ export const config = {
     locations: process.env.FILTER_LOCATIONS
       ? process.env.FILTER_LOCATIONS.split(",").map((s) => s.trim().toLowerCase())
       : [],
-    keywords: process.env.FILTER_KEYWORDS
-      ? process.env.FILTER_KEYWORDS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+    neighborhoods: process.env.FILTER_NEIGHBORHOODS
+      ? process.env.FILTER_NEIGHBORHOODS.split(",").map((s) => s.trim().toLowerCase())
       : [],
-    excludeKeywords: process.env.FILTER_EXCLUDE_KEYWORDS
-      ? process.env.FILTER_EXCLUDE_KEYWORDS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-      : [],
-  },
-
-  sort: {
-    by: process.env.SORT_BY || "date", // date | price | size
-    order: process.env.SORT_ORDER || "desc", // asc | desc
+    sortBy: process.env.FILTER_SORT_BY || "price", // price | size | rooms | none
+    sortOrder: process.env.FILTER_SORT_ORDER || "asc", // asc | desc
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
 
-  notification: {
-    showPrice: process.env.NOTIFY_SHOW_PRICE !== "false",
-    showSize: process.env.NOTIFY_SHOW_SIZE !== "false",
-    showRooms: process.env.NOTIFY_SHOW_ROOMS !== "false",
-    showLocation: process.env.NOTIFY_SHOW_LOCATION !== "false",
-    showSource: process.env.NOTIFY_SHOW_SOURCE !== "false",
-    showDescription: process.env.NOTIFY_SHOW_DESCRIPTION !== "false",
-    disablePreview: process.env.NOTIFY_DISABLE_PREVIEW === "true",
-    customHeader: process.env.NOTIFY_CUSTOM_HEADER || "",
-  },
+  triggers: (() => {
+    const raw = process.env.NOTIFICATION_TRIGGERS;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("must be a JSON array");
+      return parsed;
+    } catch (err) {
+      console.error(`[config] Invalid NOTIFICATION_TRIGGERS JSON: ${err.message}`);
+      process.exit(1);
+    }
+  })(),
 };

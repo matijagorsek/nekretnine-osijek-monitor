@@ -60,7 +60,51 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
+
+    CREATE TABLE IF NOT EXISTS scraper_health (
+      key TEXT PRIMARY KEY,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      last_failure TEXT,
+      first_failure TEXT,
+      last_success TEXT
+    );
   `);
+}
+
+/**
+ * Record a scraper selector failure. Returns the new consecutive failure count.
+ */
+export function recordScraperFailure(key) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const existing = db.prepare("SELECT * FROM scraper_health WHERE key = ?").get(key);
+  if (!existing) {
+    db.prepare(
+      "INSERT INTO scraper_health (key, consecutive_failures, last_failure, first_failure) VALUES (?, 1, ?, ?)"
+    ).run(key, now, now);
+    return 1;
+  }
+  const newCount = existing.consecutive_failures + 1;
+  db.prepare(
+    "UPDATE scraper_health SET consecutive_failures = ?, last_failure = ?, first_failure = COALESCE(first_failure, ?) WHERE key = ?"
+  ).run(newCount, now, now, key);
+  return newCount;
+}
+
+/**
+ * Record a scraper success. Returns true if it was previously failing (recovered).
+ */
+export function recordScraperSuccess(key) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const existing = db.prepare("SELECT consecutive_failures FROM scraper_health WHERE key = ?").get(key);
+  const wasFailing = existing && existing.consecutive_failures > 0;
+  db.prepare(
+    `INSERT INTO scraper_health (key, consecutive_failures, last_success, first_failure)
+     VALUES (?, 0, ?, NULL)
+     ON CONFLICT(key) DO UPDATE SET consecutive_failures = 0, last_success = ?, first_failure = NULL`
+  ).run(key, now, now);
+  return wasFailing;
 }
 
 /**

@@ -16,17 +16,10 @@ if (missing.length) {
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
-import {
-  getDb, listingExists, insertListing, markNotified, getUnnotified,
-  getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites,
-  addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs,
-} from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters, applySorting } from "./filters.js";
-import {
-  notifyNewListings, sendTestMessage, notifyPriceDrop, notifySimilarListing,
-  startPolling, answerCallbackQuery, sendFilterStatus, sendStats,
-} from "./notifier.js";
+import { applyFilters, applySort, matchesTrigger } from "./filters.js";
+import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -34,7 +27,7 @@ import * as indexOglasi from "./scrapers/index-oglasi.js";
 import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
 import * as oglasnik from "./scrapers/oglasnik.js";
-import * as crozilla from "./scrapers/crozilla.js";
+import * as zida from "./scrapers/4zida.js";
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
@@ -42,7 +35,7 @@ const SCRAPERS = [
   { name: "Nekretnine.hr", module: nekretnineHr },
   { name: "Lokalne agencije", module: localAgencies },
   { name: "Oglasnik", module: oglasnik },
-  { name: "Crozilla", module: crozilla },
+  { name: "4zida", module: zida },
 ];
 
 // ─── Main scraping pipeline ───
@@ -55,23 +48,31 @@ async function runPipeline() {
 
   // 1. Scrape all sources for each configured city
   let allListings = [];
-  let scrapersOk = 0;
-  let scrapersFailed = 0;
-  const scraperErrors = [];
-
-  for (const scraper of SCRAPERS) {
-    for (const city of config.filters.cities) {
+  for (const city of config.cities) {
+    console.log(`\n🏙 Scraping city: ${city}`);
+    for (const scraper of SCRAPERS) {
       try {
-        logger.info(`📡 Scraping: ${scraper.name} (${city})...`);
-        const listings = await scraper.module.scrape(config.filters.type, city);
-        listings.forEach((l) => { if (!l.city) l.city = city; });
+        console.log(`\n📡 Scraping: ${scraper.name}...`);
+        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
+        if (listings.length === 0 && containerCount === 0) {
+          const healthKey = `${scraper.name}:${city}`;
+          const failures = recordScraperFailure(healthKey);
+          if (failures >= 3) {
+            await sendMessage(`🚨 ${scraper.name} (${city}): selector failure for ${failures} consecutive runs — website structure may have changed, manual selector update required`);
+          } else {
+            await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure (consecutive failure #${failures})`);
+          }
+          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken (consecutive failure #${failures})`);
+        } else {
+          const recovered = recordScraperSuccess(`${scraper.name}:${city}`);
+          if (recovered) {
+            await sendMessage(`✅ ${scraper.name} (${city}): selectors recovered and working again`);
+          }
+        }
         allListings.push(...listings);
-        scrapersOk++;
-        logger.info(`✅ ${scraper.name} (${city}): ${listings.length} listings`);
       } catch (err) {
-        scrapersFailed++;
-        scraperErrors.push(`${scraper.name}(${city}): ${err.message}`);
-        logger.error(`❌ ${scraper.name} (${city}) error: ${err.message}`, err.stack);
+        console.error(`❌ ${scraper.name} error:`, err.message);
+        await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
       }
     }
   }
@@ -79,8 +80,8 @@ async function runPipeline() {
   logger.info(`📊 Total raw listings: ${allListings.length}`);
 
   // 2. Apply filters and sort
-  const filtered = applySorting(applyFilters(allListings));
-  logger.info(`🔍 After filters: ${filtered.length}`);
+  const filtered = applySort(applyFilters(allListings));
+  console.log(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones
   const newListings = [];
@@ -129,9 +130,27 @@ async function runPipeline() {
 
   // 4. Notify via configured channels
   if (newListings.length > 0) {
-    await notifyNewListings(newListings);
-    markNotified(newListings.map((l) => l.id));
-    logger.info(`📨 Notification sent (channels: ${channels.join(", ")})!`);
+    try {
+      if (config.triggers && config.triggers.length > 0) {
+        for (const trigger of config.triggers) {
+          const matched = newListings.filter((l) => matchesTrigger(l, trigger));
+          if (matched.length > 0) {
+            console.log(`🔔 Trigger "${trigger.name}": ${matched.length} matching listings`);
+            await notifyNewListings(matched, trigger.name);
+          }
+        }
+      } else {
+        await notifyNewListings(newListings);
+      }
+    } catch (err) {
+      console.error("[telegram] Failed to send notifications:", err.message);
+    }
+    try {
+      markNotified(newListings.map((l) => l.id));
+    } catch (err) {
+      console.error("[db] Failed to mark listings as notified:", err.message);
+    }
+    console.log(`📨 Telegram notification sent!`);
   } else {
     logger.info(`😴 Nema novih nekretnina danas.`);
   }
@@ -186,8 +205,13 @@ async function main() {
   const runNow = process.argv.includes("--run-now");
 
   if (runNow) {
-    logger.info("🚀 Running immediately (--run-now)...");
-    await runPipeline();
+    console.log("🚀 Running immediately (--run-now)...");
+    try {
+      await runPipeline();
+    } catch (err) {
+      console.error("💥 Pipeline error:", err);
+      process.exit(1);
+    }
     process.exit(0);
   }
 

@@ -4,16 +4,14 @@ import { logger } from "../logger.js";
 
 const SOURCE = "njuskalo";
 
-function getSearchUrls(city) {
-  if (city === "osijek") {
-    return {
-      stan: "https://www.njuskalo.hr/prodaja-stanova/osijek?geo%5BlocationIds%5D=2530",
-      kuca: "https://www.njuskalo.hr/prodaja-kuca/osijek?geo%5BlocationIds%5D=2530",
-    };
-  }
+const LOCATION_IDS = { osijek: 2530 };
+
+function getUrls(city) {
+  const id = LOCATION_IDS[city];
+  const idParam = id ? `?geo%5BlocationIds%5D=${id}` : "";
   return {
-    stan: `https://www.njuskalo.hr/prodaja-stanova/${city}`,
-    kuca: `https://www.njuskalo.hr/prodaja-kuca/${city}`,
+    stan: `https://www.njuskalo.hr/prodaja-stanova/${city}${idParam}`,
+    kuca: `https://www.njuskalo.hr/prodaja-kuca/${city}${idParam}`,
   };
 }
 
@@ -21,7 +19,7 @@ export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
   let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
-  const SEARCH_URLS = getSearchUrls(city);
+  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     try {
@@ -43,12 +41,19 @@ export async function scrape(filterType = "all", city = "osijek") {
     } catch (e) {
       logger.error(`[njuskalo] Error scraping ${type}: ${e.message}`);
     }
+
+    const { listings, containerCount } = parseListings(html, type, city);
+    results.push(...listings);
+    totalContainerCount += containerCount;
+    console.log(`[njuskalo] Found ${listings.length} ${type} listings`);
+
+    await politeSleep();
   }
 
   return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type, city = "osijek") {
+function parseListings(html, type, city) {
   const $ = cheerio.load(html);
   const listings = [];
 

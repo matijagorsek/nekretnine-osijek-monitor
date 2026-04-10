@@ -30,13 +30,7 @@ export function applyFilters(listings) {
       if (filters.roomsMax && l.rooms > filters.roomsMax) return false;
     }
 
-    // Floor range
-    if (l.floor != null) {
-      if (filters.floorMin != null && l.floor < filters.floorMin) return false;
-      if (filters.floorMax != null && l.floor > filters.floorMax) return false;
-    }
-
-    // Location filter (if specific locations are set)
+    // Location filter (if specific locations are set, only apply to primary city)
     if (filters.locations.length > 0 && l.location) {
       if (!l.city || l.city === filters.city) {
         const locLower = l.location.toLowerCase();
@@ -58,54 +52,48 @@ export function applyFilters(listings) {
       }
     }
 
-    // Keyword include filters (at least one must match if any defined)
-    const includeKeywords = [
-      ...filters.keywords,
-      ...getUserFilters("include").map((f) => f.keyword),
-    ];
-    if (includeKeywords.length > 0) {
-      const searchText = `${l.title || ""} ${l.description || ""}`.toLowerCase();
-      if (!includeKeywords.some((kw) => searchText.includes(kw))) return false;
-    }
-
-    // Keyword exclude filters (none must match)
-    const excludeKeywords = [
-      ...filters.excludeKeywords,
-      ...getUserFilters("exclude").map((f) => f.keyword),
-    ];
-    if (excludeKeywords.length > 0) {
-      const searchText = `${l.title || ""} ${l.description || ""}`.toLowerCase();
-      if (excludeKeywords.some((kw) => searchText.includes(kw))) return false;
-    }
-
     return true;
   });
 }
 
 /**
- * Sort listings by the configured sort field and order.
+ * Check if a listing matches a user-defined trigger's criteria.
  */
-export function applySorting(listings) {
-  const { by, order } = config.sort;
-  const dir = order === "asc" ? 1 : -1;
+export function matchesTrigger(listing, trigger) {
+  if (trigger.type && trigger.type !== "all" && listing.type && listing.type !== trigger.type) return false;
+  if (listing.price) {
+    if (trigger.priceMin && listing.price < trigger.priceMin) return false;
+    if (trigger.priceMax && listing.price > trigger.priceMax) return false;
+  }
+  if (listing.size) {
+    if (trigger.sizeMin && listing.size < trigger.sizeMin) return false;
+    if (trigger.sizeMax && listing.size > trigger.sizeMax) return false;
+  }
+  if (listing.rooms) {
+    if (trigger.roomsMin && listing.rooms < trigger.roomsMin) return false;
+    if (trigger.roomsMax && listing.rooms > trigger.roomsMax) return false;
+  }
+  if (trigger.locations && trigger.locations.length > 0 && listing.location) {
+    const locLower = listing.location.toLowerCase();
+    const matches = trigger.locations.some(
+      (fl) => locLower.includes(fl.toLowerCase()) || fl.toLowerCase().includes(locLower)
+    );
+    if (!matches) return false;
+  }
+  return true;
+}
+
+/**
+ * Sort listings by the configured field and order.
+ */
+export function applySort(listings) {
+  const { sortBy, sortOrder } = config.filters;
+
+  if (!sortBy || sortBy === "none") return listings;
 
   return [...listings].sort((a, b) => {
-    let aVal, bVal;
-
-    if (by === "price") {
-      aVal = a.price ?? -Infinity;
-      bVal = b.price ?? -Infinity;
-    } else if (by === "size") {
-      aVal = a.size ?? -Infinity;
-      bVal = b.size ?? -Infinity;
-    } else {
-      // date — use dateAdded if present, fall back to insertion order (stable)
-      aVal = a.dateAdded ? new Date(a.dateAdded).getTime() : 0;
-      bVal = b.dateAdded ? new Date(b.dateAdded).getTime() : 0;
-    }
-
-    if (aVal < bVal) return -dir;
-    if (aVal > bVal) return dir;
-    return 0;
+    const aVal = a[sortBy] ?? 0;
+    const bVal = b[sortBy] ?? 0;
+    return sortOrder === "desc" ? bVal - aVal : aVal - bVal;
   });
 }

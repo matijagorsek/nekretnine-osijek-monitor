@@ -127,7 +127,7 @@ export function startPolling(onCallbackQuery, onMessage = null) {
  * Format and send new listings as Telegram notifications.
  * Each listing is sent as an individual message with a ⭐ Save button.
  */
-export async function notifyNewListings(listings) {
+export async function notifyNewListings(listings, triggerName = null) {
   if (!listings.length) {
     logger.info("[telegram] No new listings to notify.");
     return;
@@ -139,12 +139,31 @@ export async function notifyNewListings(listings) {
   }
 
   // Header message
-  const headerTitle = config.notification.customHeader || "🏠 <b>Nove nekretnine u Osijeku</b>";
-  const header = `${headerTitle}\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"─".repeat(30)}`;
-  await sendMessage(header);
-  await new Promise((r) => setTimeout(r, 100));
+  const citiesInBatch = [...new Set(listings.map((l) => l.city || "osijek"))];
+  const citiesLabel = citiesInBatch.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
+  const triggerLabel = triggerName ? `🔔 <b>Trigger: ${escapeHtml(triggerName)}</b>\n` : "";
+  const header = `${triggerLabel}🏠 <b>Nove nekretnine: ${citiesLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
-  // Send each listing individually with a favorite button
+  // Format each listing
+  const formatted = listings.map((l) => formatListing(l));
+
+  // Split into chunks respecting Telegram's 4096 char limit
+  const messages = [];
+  let current = header + "\n\n";
+
+  for (const item of formatted) {
+    if (current.length + item.length + 2 > 4000) {
+      messages.push(current);
+      current = "";
+    }
+    current += item + "\n\n";
+  }
+  if (current.trim()) {
+    const footer = `\n⏱ <i>Ažurirano: ${new Date().toLocaleTimeString("hr-HR", { hour: "2-digit", minute: "2-digit" })}</i>`;
+    messages.push(current + footer);
+  }
+
+  // Send all chunks
   let success = 0;
   for (const listing of listings) {
     const text = formatListing(listing);
@@ -191,21 +210,23 @@ function formatListing(l) {
   const n = config.notification;
   const icon = l.type === "kuca" ? "🏡" : "🏢";
   const source = formatSource(l.source);
-  const price = n.showPrice ? (l.price ? `💰 ${l.price.toLocaleString("hr-HR")} €` : "💰 Cijena na upit") : null;
-  const size = n.showSize && l.size ? `📐 ${l.size} m²` : null;
-  const rooms = n.showRooms && l.rooms ? `🛏 ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : null;
-  const location = n.showLocation && l.location ? `📍 ${capitalize(l.location)}` : null;
+  const price = l.price ? `💰 <b>${l.price.toLocaleString("hr-HR")} €</b>` : "💰 <i>Cijena na upit</i>";
+  const size = l.size ? `📐 ${l.size} m²` : "";
+  const rooms = l.rooms ? `🛏️ ${l.rooms} sob${l.rooms === 1 ? "a" : l.rooms < 5 ? "e" : "a"}` : "";
+  const location = l.location ? `📍 ${capitalize(l.location)}` : "";
 
-  const details = [price, size, rooms, location].filter(Boolean).join(" • ");
-  const sourceTag = n.showSource ? ` <i>(${source})</i>` : "";
-  const description = n.showDescription && l.description ? `📝 ${escapeHtml(l.description.trim())}` : null;
+  const details = [size, rooms, location].filter(Boolean).join("  •  ");
 
   const lines = [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
-    details,
-    description,
-    `🔗 <a href="${l.url}">Otvori oglas</a>${sourceTag}`,
-  ].filter(Boolean).join("\n");
+    price,
+  ];
+  if (details) lines.push(details);
+  if (l.description) lines.push(`📝 <i>${escapeHtml(l.description.slice(0, 150))}</i>`);
+  lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
+  lines.push(`${"─".repeat(26)}`);
+
+  return lines.join("\n");
 }
 
 function formatSource(source) {
