@@ -195,6 +195,8 @@ async function main() {
 
   // Start polling for Telegram button callbacks (fav/unfav) and /filter commands
   if (!config.channels.includes("telegram")) {
+  let currentTask;
+  if (!channels.includes("telegram")) {
     logger.info("📡 Telegram polling skipped (telegram not in NOTIFICATION_CHANNELS)");
   } else startPolling(
     async (callbackQuery) => {
@@ -226,6 +228,30 @@ async function main() {
       if (text === "/stats") {
         const logs = getRecentRunLogs(5);
         await sendStats(logs);
+        return;
+      }
+
+      if (text.startsWith("/schedule")) {
+        const expr = text.trim().slice("/schedule".length).trim();
+        if (!expr) {
+          await sendMessage(`⏰ Trenutni raspored: \`${config.cron}\`\nKoristi: /schedule <cron izraz>\nPrimjer: /schedule 0 8,20 * * *`);
+          return;
+        }
+        if (!cron.validate(expr)) {
+          await sendMessage(`❌ Neispravan cron izraz: \`${expr}\``);
+          return;
+        }
+        if (currentTask) currentTask.stop();
+        config.cron = expr;
+        currentTask = cron.schedule(expr, async () => {
+          try {
+            await runPipeline();
+          } catch (err) {
+            logger.error(`💥 Pipeline error: ${err.message}`, err.stack);
+          }
+        }, { timezone: "Europe/Zagreb" });
+        await sendMessage(`✅ Raspored ažuriran na: \`${expr}\``);
+        logger.info(`[schedule] Cron updated to: ${expr}`);
         return;
       }
 
@@ -276,9 +302,13 @@ async function main() {
   await sendTestMessage();
 
   // Schedule cron job
+  if (!cron.validate(config.cron)) {
+    logger.error(`Invalid CRON_SCHEDULE: "${config.cron}"`);
+    process.exit(1);
+  }
   logger.info(`⏰ Scheduled: "${config.cron}" (Default: every day at 12:00)`);
 
-  cron.schedule(config.cron, async () => {
+  currentTask = cron.schedule(config.cron, async () => {
     try {
       await runPipeline();
     } catch (err) {
