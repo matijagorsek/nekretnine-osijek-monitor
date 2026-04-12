@@ -9,10 +9,11 @@ if (missing.length) {
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
-import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
-import { applyFilters } from "./filters.js";
-import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
+import { logger } from "./logger.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -41,6 +42,9 @@ async function runPipeline() {
 
   // 1. Scrape all sources for each configured city
   let allListings = [];
+  let scrapersOk = 0;
+  let scrapersFailed = 0;
+  const scraperErrors = [];
   for (const scraper of SCRAPERS) {
     try {
       console.log(`\n📡 Scraping: ${scraper.name}...`);
@@ -50,9 +54,12 @@ async function runPipeline() {
         console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
       }
       allListings.push(...listings);
+      scrapersOk++;
     } catch (err) {
       console.error(`❌ ${scraper.name} error:`, err.message);
       await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
+      scrapersFailed++;
+      scraperErrors.push(`${scraper.name}: ${err.message}`);
     }
   }
 
@@ -185,7 +192,7 @@ async function main() {
   }
 
   // Start polling for Telegram button callbacks (fav/unfav) and /filter commands
-  if (!channels.includes("telegram")) {
+  if (!config.channels.includes("telegram")) {
     logger.info("📡 Telegram polling skipped (telegram not in NOTIFICATION_CHANNELS)");
   } else startPolling(
     async (callbackQuery) => {
