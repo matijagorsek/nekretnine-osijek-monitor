@@ -114,6 +114,21 @@ export async function notifySimilarListing(newListing, favListing) {
   await Promise.allSettled(tasks);
 }
 
+export async function notifyTriggerMatch(triggerName, listings) {
+  const tasks = [];
+  if (channels.includes("telegram")) tasks.push(telegram.notifyTriggerMatch(triggerName, listings));
+  if (channels.includes("email")) {
+    const html =
+      `<h2>🎯 Trigger: ${triggerName}</h2>` +
+      `<p>Pronađeno: <b>${listings.length}</b> novih oglasa — ` +
+      `${new Date().toLocaleDateString("hr-HR")}</p>` +
+      `<ul>${buildListingsHtml(listings)}</ul>`;
+    tasks.push(sendEmailNotification(`🎯 Trigger: ${triggerName}`, html));
+  }
+  if (channels.includes("webhook")) tasks.push(sendWebhookNotification("trigger_match", { triggerName, listings }));
+  await Promise.allSettled(tasks);
+}
+
 export async function sendTestMessage() {
   const tasks = [];
   if (channels.includes("telegram")) tasks.push(telegram.sendTestMessage());

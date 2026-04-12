@@ -83,6 +83,11 @@ export const config = {
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
 
+  alertThresholds: {
+    priceDropMinPct: Number(process.env.ALERT_PRICE_DROP_MIN_PCT) || 0,
+    priceDropMinEur: Number(process.env.ALERT_PRICE_DROP_MIN_EUR) || 0,
+  },
+
   triggers: (() => {
     const raw = process.env.NOTIFICATION_TRIGGERS;
     if (!raw) {

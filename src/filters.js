@@ -84,6 +84,30 @@ export function applyFilters(listings) {
 }
 
 /**
+ * Check whether a listing matches a user-defined trigger's criteria.
+ */
+export function matchesTrigger(listing, trigger) {
+  if (trigger.type && trigger.type !== "all" && listing.type && listing.type !== trigger.type) return false;
+  if (listing.price != null) {
+    if (trigger.priceMin != null && listing.price < trigger.priceMin) return false;
+    if (trigger.priceMax != null && listing.price > trigger.priceMax) return false;
+  }
+  if (listing.size != null) {
+    if (trigger.sizeMin != null && listing.size < trigger.sizeMin) return false;
+    if (trigger.sizeMax != null && listing.size > trigger.sizeMax) return false;
+  }
+  if (listing.rooms != null) {
+    if (trigger.roomsMin != null && listing.rooms < trigger.roomsMin) return false;
+    if (trigger.roomsMax != null && listing.rooms > trigger.roomsMax) return false;
+  }
+  if (trigger.locations && trigger.locations.length > 0 && listing.location) {
+    const locLower = listing.location.toLowerCase();
+    if (!trigger.locations.some((tl) => locLower.includes(tl.toLowerCase()) || tl.toLowerCase().includes(locLower))) return false;
+  }
+  return true;
+}
+
+/**
  * Sort listings by the configured field and order.
  */
 export function applySort(listings) {

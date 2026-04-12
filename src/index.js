@@ -19,6 +19,11 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage, notifyPriceDrop, notifySimilarListing, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites } from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort, matchesTrigger } from "./filters.js";
+import { notifyNewListings, notifyPriceDrop, notifyTriggerMatch, sendTestMessage } from "./notifier.js";
+import { sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -97,8 +102,13 @@ async function runPipeline() {
       if (listing.price != null) {
         const existing = getListingById(listing.id);
         if (existing && existing.price != null && listing.price < existing.price) {
-          await notifyPriceDrop(listing, existing.price, isFavorite(listing.id));
-          await new Promise((r) => setTimeout(r, 100));
+          const drop = existing.price - listing.price;
+          const dropPct = (drop / existing.price) * 100;
+          const { priceDropMinPct, priceDropMinEur } = config.alertThresholds;
+          if (drop >= priceDropMinEur && dropPct >= priceDropMinPct) {
+            await notifyPriceDrop(listing, existing.price, isFavorite(listing.id));
+            await new Promise((r) => setTimeout(r, 100));
+          }
         }
         if (existing && existing.price !== listing.price) {
           updateListingPrice(listing.id, listing.price);
@@ -145,7 +155,21 @@ async function runPipeline() {
     logger.info(`😴 Nema novih nekretnina danas.`);
   }
 
-  // 5. Check new listings for similarity to favorites
+  // 5. Check new listings against user-defined triggers
+  if (config.triggers.length > 0 && newListings.length > 0) {
+    for (const trigger of config.triggers) {
+      const matched = newListings.filter((l) => matchesTrigger(l, trigger));
+      if (matched.length > 0) {
+        try {
+          await notifyTriggerMatch(trigger.name || "Trigger", matched);
+        } catch (err) {
+          console.error(`[triggers] Failed to notify trigger "${trigger.name}":`, err.message);
+        }
+      }
+    }
+  }
+
+  // 6. Check new listings for similarity to favorites
   const favorites = getFavorites();
   if (favorites.length > 0 && newListings.length > 0) {
     for (const newListing of newListings) {
