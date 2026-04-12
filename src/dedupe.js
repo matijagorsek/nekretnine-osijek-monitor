@@ -16,6 +16,7 @@ const SIZE_BUCKET = 3; // round to nearest 3 m²
 
 export function generateFingerprint(listing) {
   const parts = [
+    (listing.city || "").toLowerCase(),
     normalizeType(listing.type),
     bucketize(listing.price, PRICE_BUCKET),
     bucketize(listing.size, SIZE_BUCKET),
@@ -75,6 +76,8 @@ export function similarityScore(a, b) {
  */
 export function isDuplicate(newListing, existingListings, threshold = 0.85) {
   for (const existing of existingListings) {
+    // Never deduplicate across different cities
+    if (newListing.city && existing.city && newListing.city !== existing.city) continue;
     if (similarityScore(newListing, existing) >= threshold) {
       return { isDupe: true, matchedWith: existing };
     }

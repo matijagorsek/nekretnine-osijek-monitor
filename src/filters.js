@@ -9,6 +9,11 @@ export function applyFilters(listings) {
   const { filters } = config;
 
   return listings.filter((l) => {
+    // City filter - restrict to configured cities
+    if (filters.cities.length > 0 && l.city) {
+      if (!filters.cities.includes(l.city.toLowerCase())) return false;
+    }
+
     // Type filter
     if (filters.type !== "all" && l.type && l.type !== filters.type) return false;
 

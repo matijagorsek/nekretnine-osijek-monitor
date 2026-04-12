@@ -26,6 +26,7 @@ function migrate() {
       rooms INTEGER,
       location TEXT,
       type TEXT,
+      city TEXT,
       description TEXT,
       image_url TEXT,
       fingerprint TEXT,
@@ -62,6 +63,7 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_image_url ON listings(image_url);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
+    CREATE INDEX IF NOT EXISTS idx_city ON listings(city);
 
     CREATE TABLE IF NOT EXISTS scraper_health (
       key TEXT PRIMARY KEY,
@@ -81,6 +83,9 @@ function migrate() {
   // Migrate existing databases that don't have image_url yet
   try {
     db.exec("ALTER TABLE listings ADD COLUMN image_url TEXT");
+  // Migrate existing DBs: add city column if missing
+  try {
+    db.exec("ALTER TABLE listings ADD COLUMN city TEXT");
   } catch (_) {
     // Column already exists
   }
@@ -150,6 +155,8 @@ export function insertListing(listing) {
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @amenities, @orientation)`
     `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, image_url, fingerprint)
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @image_url, @fingerprint)`
+    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, city, description, fingerprint)
+     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @city, @description, @fingerprint)`
   ).run(listing);
 }
 

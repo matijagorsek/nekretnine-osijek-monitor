@@ -79,6 +79,19 @@ async function runPipeline() {
       recordScraperFailure(scraper.name);
       scrapersFailed++;
       scraperErrors.push(`${scraper.name}: ${err.message}`);
+    for (const city of config.cities) {
+      try {
+        console.log(`\n📡 Scraping: ${scraper.name} (${city})...`);
+        const { listings, containerCount } = await scraper.module.scrape(config.filters.type, city);
+        if (listings.length === 0 && containerCount === 0) {
+          await sendMessage(`⚠️ ${scraper.name} (${city}): 0 container elements — possible selector failure`);
+          console.warn(`[${scraper.name}] 0 containers found for ${city} — selector may be broken`);
+        }
+        allListings.push(...listings);
+      } catch (err) {
+        console.error(`❌ ${scraper.name} (${city}) error:`, err.message);
+        await sendMessage(`❌ ${scraper.name} (${city}) scrape failed: ${err.message}`);
+      }
     }
   }
 
