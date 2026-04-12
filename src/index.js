@@ -21,6 +21,7 @@ import * as nekretnineHr from "./scrapers/nekretnine-hr.js";
 import * as localAgencies from "./scrapers/local-agencies.js";
 import * as oglasnik from "./scrapers/oglasnik.js";
 import * as zida from "./scrapers/4zida.js";
+import * as custom from "./scrapers/custom.js";
 
 const SCRAPERS = [
   { name: "Njuškalo", module: njuskalo },
@@ -29,6 +30,7 @@ const SCRAPERS = [
   { name: "Lokalne agencije", module: localAgencies },
   { name: "Oglasnik", module: oglasnik },
   { name: "4zida", module: zida },
+  { name: "Custom", module: custom },
 ];
 
 // ─── Main scraping pipeline ───

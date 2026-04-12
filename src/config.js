@@ -75,4 +75,17 @@ export const config = {
       process.exit(1);
     }
   })(),
+
+  customScrapers: (() => {
+    const raw = process.env.CUSTOM_SCRAPERS;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("must be a JSON array");
+      return parsed;
+    } catch (err) {
+      console.error(`[config] Invalid CUSTOM_SCRAPERS JSON: ${err.message}`);
+      process.exit(1);
+    }
+  })(),
 };
