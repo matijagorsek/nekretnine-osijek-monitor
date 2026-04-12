@@ -75,6 +75,10 @@ function parseListings(html, type, city) {
       const rooms = extractRooms(infoText);
       const location = extractLocation(infoText, city);
 
+      const imgEl = $el.find(".oglas-slika img, .listing-image img, img").first();
+      const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
+      const image_url = imgSrc && !imgSrc.startsWith("data:") ? imgSrc : null;
+
       const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
       listings.push({
@@ -91,6 +95,7 @@ function parseListings(html, type, city) {
         description: infoText.slice(0, 300),
         amenities: extractAmenities(infoText),
         orientation: extractOrientation(infoText),
+        image_url,
       });
     } catch (e) {
       logger.warn(`[index] Failed to parse listing: ${e.message}`);

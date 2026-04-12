@@ -87,6 +87,11 @@ function parseListings(html, type, city) {
         const rooms = extractRooms(infoText);
         const location = extractLocation(infoText, city);
 
+        const imgEl = $el.find(".property-image img, .card-image img, img").first();
+        const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
+        const rawImgUrl = imgSrc && !imgSrc.startsWith("data:") ? imgSrc : null;
+        const image_url = rawImgUrl && !rawImgUrl.startsWith("http") ? `https://www.nekretnine.hr${rawImgUrl}` : rawImgUrl;
+
         const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
         listings.push({
@@ -103,6 +108,7 @@ function parseListings(html, type, city) {
           description: infoText.slice(0, 300),
           amenities: extractAmenities(infoText),
           orientation: extractOrientation(infoText),
+          image_url,
         });
       } catch (e) {
         logger.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
