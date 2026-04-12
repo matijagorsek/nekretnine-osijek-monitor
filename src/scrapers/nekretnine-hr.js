@@ -101,6 +101,8 @@ function parseListings(html, type, city) {
           type,
           city,
           description: infoText.slice(0, 300),
+          amenities: extractAmenities(infoText),
+          orientation: extractOrientation(infoText),
         });
       } catch (e) {
         logger.warn(`[nekretnine.hr] Failed to parse listing: ${e.message}`);
@@ -130,6 +132,43 @@ function extractRooms(text) {
   for (const [w, n] of Object.entries(wordMap)) {
     if (text.toLowerCase().includes(w)) return n;
   }
+  return null;
+}
+
+function extractAmenities(text) {
+  const lower = text.toLowerCase();
+  const KEYWORD_MAP = {
+    "garaž": "garaža",
+    "parking": "parking",
+    "balkon": "balkon",
+    "terasa": "terasa",
+    "terasom": "terasa",
+    "lift": "lift",
+    "podrum": "podrum",
+    "okućnica": "okućnica",
+    "namješteno": "namješteno",
+    "namještena": "namješteno",
+    "klima": "klima",
+    "centralno grijanje": "centralno grijanje",
+    "centralnog grijanja": "centralno grijanje",
+  };
+  const seen = new Set();
+  const amenities = [];
+  for (const [keyword, label] of Object.entries(KEYWORD_MAP)) {
+    if (lower.includes(keyword) && !seen.has(label)) {
+      amenities.push(label);
+      seen.add(label);
+    }
+  }
+  return amenities.length > 0 ? JSON.stringify(amenities) : null;
+}
+
+function extractOrientation(text) {
+  const lower = text.toLowerCase();
+  if (/orijenti?rano\s+prema\s+jugu|južna\s+strana|okrenuto\s+prema\s+jugu/.test(lower)) return "jug";
+  if (/orijenti?rano\s+prema\s+sjeveru|sjeverna\s+strana|okrenuto\s+prema\s+sjeveru/.test(lower)) return "sjever";
+  if (/orijenti?rano\s+prema\s+istoku|istočna\s+strana|okrenuto\s+prema\s+istoku/.test(lower)) return "istok";
+  if (/orijenti?rano\s+prema\s+zapadu|zapadna\s+strana|okrenuto\s+prema\s+zapadu/.test(lower)) return "zapad";
   return null;
 }
 

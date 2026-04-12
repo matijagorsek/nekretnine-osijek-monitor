@@ -59,6 +59,12 @@ export const config = {
       : [],
     sortBy: process.env.FILTER_SORT_BY || "price", // price | size | rooms | none
     sortOrder: process.env.FILTER_SORT_ORDER || "asc", // asc | desc
+    amenities: process.env.FILTER_AMENITIES
+      ? process.env.FILTER_AMENITIES.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [],
+    orientations: process.env.FILTER_ORIENTATIONS
+      ? process.env.FILTER_ORIENTATIONS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [],
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
