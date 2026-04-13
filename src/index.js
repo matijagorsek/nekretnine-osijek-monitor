@@ -32,6 +32,23 @@ import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 import { logger } from "./logger.js";
 import { notifyNewListings, sendDigest, sendTestMessage, sendMessage } from "./telegram.js";
 import { notifyNewListings, notifyPriceDrop, sendTestMessage, sendMessage } from "./telegram.js";
+import { logger } from "./logger.js";
+import {
+  getDb, listingExists, insertListing, markNotified, getUnnotified,
+  recordScraperFailure, recordScraperSuccess,
+  getListingById, addFavorite, removeFavorite, isFavorite, getFavorites,
+  addUserFilter, removeUserFilter, getUserFilters,
+  getRecentRunLogs, recordRunLog, updateListingPrice,
+  setFilterOverride, getAllFilterOverrides, clearAllFilterOverrides,
+} from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import {
+  notifyNewListings, sendTestMessage, sendMessage,
+  startPolling, answerCallbackQuery,
+  sendStats, sendFilterStatus, sendStatus,
+  notifyPriceDrop, notifySimilarListing,
+} from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -84,6 +101,9 @@ async function runPipeline() {
       scrapersOk++;
     } catch (err) {
       logger.error(`❌ ${scraper.name} error: ${err.message}`);
+      scrapersFailed++;
+      scraperErrors.push(`${scraper.name}: ${err.message}`);
+      console.error(`❌ ${scraper.name} error:`, err.message);
       await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
       recordScraperFailure(scraper.name);
       scrapersFailed++;
@@ -368,16 +388,42 @@ async function main() {
         }, { timezone: "Europe/Zagreb" });
         await sendMessage(`✅ Raspored ažuriran na: \`${expr}\``);
         logger.info(`[schedule] Cron updated to: ${expr}`);
+      if (text === "/status") {
+        await sendStatus();
+        return;
+      }
+
+      if (text.startsWith("/clearfilter")) {
+        clearAllFilterOverrides();
+        await sendMessage("✅ Filter overrides cleared. Using env-var defaults.");
         return;
       }
 
       if (!text.startsWith("/filter")) return;
 
       const parts = text.trim().split(/\s+/);
-      const sub = parts[1]; // add | remove | exclude | unexclude | list
+      const sub = parts[1]; // add | remove | exclude | unexclude | list | price | size | rooms
       const keyword = parts.slice(2).join(" ").toLowerCase().trim();
 
-      if (sub === "list") {
+      if (sub === "price") {
+        const min = parseInt(parts[2], 10);
+        const max = parseInt(parts[3], 10);
+        if (!isNaN(min)) setFilterOverride("priceMin", min);
+        if (!isNaN(max)) setFilterOverride("priceMax", max);
+        await sendStatus();
+      } else if (sub === "size") {
+        const min = parseInt(parts[2], 10);
+        const max = parseInt(parts[3], 10);
+        if (!isNaN(min)) setFilterOverride("sizeMin", min);
+        if (!isNaN(max)) setFilterOverride("sizeMax", max);
+        await sendStatus();
+      } else if (sub === "rooms") {
+        const min = parseInt(parts[2], 10);
+        const max = parseInt(parts[3], 10);
+        if (!isNaN(min)) setFilterOverride("roomsMin", min);
+        if (!isNaN(max)) setFilterOverride("roomsMax", max);
+        await sendStatus();
+      } else if (sub === "list") {
         const includes = getUserFilters("include").map((f) => f.keyword);
         const excludes = getUserFilters("exclude").map((f) => f.keyword);
         await sendFilterStatus(includes, excludes);

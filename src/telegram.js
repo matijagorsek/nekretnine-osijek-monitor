@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
+import { getAllFilterOverrides } from "./db.js";
 
 const API_BASE = `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -391,6 +392,38 @@ export async function sendDigest(listings) {
   }
 
   return sendMessage(text);
+ * Send the current active filter state, showing both env-var defaults and DB overrides.
+ */
+export async function sendStatus() {
+  const { filters } = config;
+  const overrideRows = getAllFilterOverrides();
+  const ov = {};
+  for (const row of overrideRows) ov[row.key] = Number(row.value);
+
+  const priceMin = ov.priceMin !== undefined ? ov.priceMin : filters.priceMin;
+  const priceMax = ov.priceMax !== undefined ? ov.priceMax : filters.priceMax;
+  const sizeMin = ov.sizeMin !== undefined ? ov.sizeMin : filters.sizeMin;
+  const sizeMax = ov.sizeMax !== undefined ? ov.sizeMax : filters.sizeMax;
+  const roomsMin = ov.roomsMin !== undefined ? ov.roomsMin : filters.roomsMin;
+  const roomsMax = ov.roomsMax !== undefined ? ov.roomsMax : filters.roomsMax;
+
+  const tag = (key1, key2) => (ov[key1] !== undefined || ov[key2] !== undefined) ? " ✏️" : "";
+
+  return sendMessage(
+    `📊 <b>Active Filters</b>\n\n` +
+    `💰 Price: <b>${priceMin.toLocaleString("hr-HR")} – ${priceMax.toLocaleString("hr-HR")} €</b>${tag("priceMin", "priceMax")}\n` +
+    `📐 Size: <b>${sizeMin} – ${sizeMax} m²</b>${tag("sizeMin", "sizeMax")}\n` +
+    `🛏️ Rooms: <b>${roomsMin} – ${roomsMax}</b>${tag("roomsMin", "roomsMax")}\n` +
+    `🏠 Type: <b>${filters.type}</b>\n\n` +
+    `<i>✏️ = override active (DB value, not env var)\n\n` +
+    `Commands:\n` +
+    `/filter price &lt;min&gt; [max]\n` +
+    `/filter size &lt;min&gt; [max]\n` +
+    `/filter rooms &lt;min&gt; [max]\n` +
+    `/clearfilter — revert to env defaults\n` +
+    `/status — show this\n` +
+    `/filter list — keyword filters</i>`
+  );
 }
 
 /**

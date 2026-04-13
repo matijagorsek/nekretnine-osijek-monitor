@@ -1,12 +1,25 @@
 import { config } from "./config.js";
-import { getUserFilters } from "./db.js";
+import { getUserFilters, getAllFilterOverrides } from "./db.js";
 
 /**
  * Apply all configured filters to a list of listings.
  * Returns only listings matching ALL criteria.
+ * DB overrides (set via Telegram commands) take precedence over env-var defaults.
  */
 export function applyFilters(listings) {
   const { filters } = config;
+
+  // Load DB overrides; they take precedence over env-var defaults
+  const overrideRows = getAllFilterOverrides();
+  const ov = {};
+  for (const row of overrideRows) ov[row.key] = Number(row.value);
+
+  const priceMin = ov.priceMin !== undefined ? ov.priceMin : filters.priceMin;
+  const priceMax = ov.priceMax !== undefined ? ov.priceMax : filters.priceMax;
+  const sizeMin = ov.sizeMin !== undefined ? ov.sizeMin : filters.sizeMin;
+  const sizeMax = ov.sizeMax !== undefined ? ov.sizeMax : filters.sizeMax;
+  const roomsMin = ov.roomsMin !== undefined ? ov.roomsMin : filters.roomsMin;
+  const roomsMax = ov.roomsMax !== undefined ? ov.roomsMax : filters.roomsMax;
 
   return listings.filter((l) => {
     // City filter - restrict to configured cities
@@ -19,20 +32,20 @@ export function applyFilters(listings) {
 
     // Price range
     if (l.price) {
-      if (filters.priceMin && l.price < filters.priceMin) return false;
-      if (filters.priceMax && l.price > filters.priceMax) return false;
+      if (priceMin && l.price < priceMin) return false;
+      if (priceMax && l.price > priceMax) return false;
     }
 
     // Size range
     if (l.size) {
-      if (filters.sizeMin && l.size < filters.sizeMin) return false;
-      if (filters.sizeMax && l.size > filters.sizeMax) return false;
+      if (sizeMin && l.size < sizeMin) return false;
+      if (sizeMax && l.size > sizeMax) return false;
     }
 
     // Rooms range
     if (l.rooms) {
-      if (filters.roomsMin && l.rooms < filters.roomsMin) return false;
-      if (filters.roomsMax && l.rooms > filters.roomsMax) return false;
+      if (roomsMin && l.rooms < roomsMin) return false;
+      if (roomsMax && l.rooms > roomsMax) return false;
     }
 
     // Location filter (if specific locations are set, only apply to primary city)

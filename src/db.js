@@ -80,6 +80,10 @@ function migrate() {
       observed_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_price_history_listing ON listing_price_history(listing_id, observed_at);
+    CREATE TABLE IF NOT EXISTS filter_overrides (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Additive migrations — ignore errors if columns already exist
@@ -278,6 +282,30 @@ export function removeUserFilter(type, keyword) {
 export function getUserFilters(type) {
   const db = getDb();
   return db.prepare("SELECT * FROM user_filters WHERE type = ? ORDER BY keyword").all(type);
+}
+
+/**
+ * Set a numeric filter override (priceMin, priceMax, sizeMin, sizeMax, roomsMin, roomsMax)
+ */
+export function setFilterOverride(key, value) {
+  const db = getDb();
+  db.prepare("INSERT OR REPLACE INTO filter_overrides (key, value) VALUES (?, ?)").run(key, String(value));
+}
+
+/**
+ * Get all filter overrides as an array of {key, value}
+ */
+export function getAllFilterOverrides() {
+  const db = getDb();
+  return db.prepare("SELECT key, value FROM filter_overrides").all();
+}
+
+/**
+ * Clear all filter overrides (revert to env-var defaults)
+ */
+export function clearAllFilterOverrides() {
+  const db = getDb();
+  db.prepare("DELETE FROM filter_overrides").run();
 }
 
 /**
