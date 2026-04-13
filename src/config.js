@@ -7,6 +7,20 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+const RENAMED_ENV_VARS = [
+  ["FILTER_KEYWORDS", "FILTER_NEIGHBORHOODS"],
+  ["NOTIFY_ON_NEW", "NOTIFICATION_TRIGGERS"],
+  ["NOTIFY_ON_PRICE_DROP", "NOTIFICATION_TRIGGERS"],
+  ["NOTIFY_CHANNELS", "NOTIFICATION_CHANNELS"],
+];
+const renamedFound = RENAMED_ENV_VARS.filter(([oldKey]) => process.env[oldKey] !== undefined);
+if (renamedFound.length > 0) {
+  for (const [oldKey, newKey] of renamedFound) {
+    console.error(`[config] FATAL: env var "${oldKey}" has been renamed to "${newKey}". Update your deployment and restart.`);
+  }
+  process.exit(1);
+}
+
 export const config = {
   channels: (process.env.NOTIFICATION_CHANNELS || "telegram")
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
