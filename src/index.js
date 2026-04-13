@@ -10,6 +10,7 @@ import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, insertPriceHistory, getPriceHistory, isFavorite } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
@@ -28,6 +29,7 @@ import { applyFilters } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 import { logger } from "./logger.js";
 import { notifyNewListings, sendDigest, sendTestMessage, sendMessage } from "./telegram.js";
+import { notifyNewListings, notifyPriceDrop, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -129,7 +131,13 @@ async function runPipeline() {
           }
         }
         if (existing && existing.price !== listing.price) {
+          insertPriceHistory(listing.id, listing.price);
           updateListingPrice(listing.id, listing.price);
+        }
+        if (existing && existing.price != null && listing.price < existing.price) {
+          const history = getPriceHistory(listing.id);
+          await notifyPriceDrop(listing, existing.price, isFavorite(listing.id), history);
+          await new Promise((r) => setTimeout(r, 100));
         }
       }
       continue;
@@ -149,6 +157,9 @@ async function runPipeline() {
     // Save to DB
     try {
       insertListing(listing);
+      if (listing.price != null) {
+        insertPriceHistory(listing.id, listing.price);
+      }
     } catch (err) {
       logger.error(`[db] Failed to insert listing "${listing.id}": ${err.message}`);
     }
