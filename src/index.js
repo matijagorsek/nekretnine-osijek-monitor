@@ -24,6 +24,9 @@ import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort, matchesTrigger } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifyTriggerMatch, sendTestMessage } from "./notifier.js";
 import { sendMessage } from "./telegram.js";
+import { applyFilters } from "./filters.js";
+import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
+import { logger } from "./logger.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -59,7 +62,7 @@ async function runPipeline() {
   const scraperErrors = [];
   for (const scraper of SCRAPERS) {
     try {
-      console.log(`\n📡 Scraping: ${scraper.name}...`);
+      logger.info(`\n📡 Scraping: ${scraper.name}...`);
       const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
       if (listings.length === 0 && containerCount === 0) {
         await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
@@ -70,11 +73,12 @@ async function runPipeline() {
       } else {
         recordScraperSuccess(scraper.name);
         scrapersOk++;
+        logger.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
       }
       allListings.push(...listings);
       scrapersOk++;
     } catch (err) {
-      console.error(`❌ ${scraper.name} error:`, err.message);
+      logger.error(`❌ ${scraper.name} error: ${err.message}`);
       await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
       recordScraperFailure(scraper.name);
       scrapersFailed++;
@@ -99,7 +103,7 @@ async function runPipeline() {
 
   // 2. Apply filters and sort
   const filtered = applySort(applyFilters(allListings));
-  console.log(`🔍 After filters: ${filtered.length}`);
+  logger.info(`🔍 After filters: ${filtered.length}`);
 
   // 3. Deduplicate and check for new ones
   const newListings = [];
@@ -145,7 +149,7 @@ async function runPipeline() {
     try {
       insertListing(listing);
     } catch (err) {
-      console.error(`[db] Failed to insert listing "${listing.id}":`, err.message);
+      logger.error(`[db] Failed to insert listing "${listing.id}": ${err.message}`);
     }
   }
 
@@ -156,14 +160,14 @@ async function runPipeline() {
     try {
       await notifyNewListings(newListings);
     } catch (err) {
-      console.error("[telegram] Failed to send notifications:", err.message);
+      logger.error(`[telegram] Failed to send notifications: ${err.message}`);
     }
     try {
       markNotified(newListings.map((l) => l.id));
     } catch (err) {
-      console.error("[db] Failed to mark listings as notified:", err.message);
+      logger.error(`[db] Failed to mark listings as notified: ${err.message}`);
     }
-    console.log(`📨 Telegram notification sent!`);
+    logger.info(`📨 Telegram notification sent!`);
   } else {
     logger.info(`😴 Nema novih nekretnina danas.`);
   }
@@ -232,7 +236,7 @@ async function main() {
   const runNow = process.argv.includes("--run-now");
 
   if (runNow) {
-    console.log("🚀 Running immediately (--run-now)...");
+    logger.info("🚀 Running immediately (--run-now)...");
     try {
       await runPipeline();
     } catch (err) {

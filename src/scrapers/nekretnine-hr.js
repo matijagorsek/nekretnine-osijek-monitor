@@ -39,21 +39,15 @@ export async function scrape(filterType = "all", city = "osijek") {
         continue;
       }
 
-      const listings = parseListings(html, type, city);
+      const { listings, containerCount } = parseListings(html, type, city);
       results.push(...listings);
+      totalContainerCount += containerCount;
       logger.info(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
       logger.error(`[nekretnine.hr] Error scraping ${type}: ${e.message}`);
     }
-
-    const { listings, containerCount } = parseListings(html, type);
-    results.push(...listings);
-    totalContainerCount += containerCount;
-    console.log(`[nekretnine.hr] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return { listings: results, containerCount: totalContainerCount };
