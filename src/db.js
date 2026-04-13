@@ -300,6 +300,14 @@ export function getRecentRunLogs(limit = 10) {
 }
 
 /**
+ * Get health status for all scrapers
+ */
+export function getScraperHealth() {
+  const db = getDb();
+  return db.prepare("SELECT * FROM scraper_health ORDER BY key").all();
+}
+
+/**
  * Get all favorited listings with their full data
  */
 export function getFavorites() {
