@@ -8,11 +8,13 @@ if (missing.length) {
 
 import { createServer } from "http";
 import cron from "node-cron";
+import { createServer } from "http";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, insertPriceHistory, getPriceHistory, isFavorite } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getRecentRunLogs, getScraperHealth } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth, getAllScraperHealth } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
@@ -49,6 +51,7 @@ import {
   sendStats, sendFilterStatus, sendStatus,
   notifyPriceDrop, notifySimilarListing,
 } from "./telegram.js";
+import { retry } from "./http.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -69,6 +72,15 @@ const SCRAPERS = [
   { name: "Custom", module: custom },
 ];
 
+const CIRCUIT_OPEN_THRESHOLD = 3;
+const CIRCUIT_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function isCircuitOpen(scraperName) {
+  const health = getScraperHealth(scraperName);
+  if (!health || health.consecutive_failures < CIRCUIT_OPEN_THRESHOLD) return false;
+  return Date.now() - new Date(health.last_failure).getTime() < CIRCUIT_COOLDOWN_MS;
+}
+
 // ─── Main scraping pipeline ───
 
 async function runPipeline() {
@@ -82,10 +94,22 @@ async function runPipeline() {
   let scrapersOk = 0;
   let scrapersFailed = 0;
   const scraperErrors = [];
+
   for (const scraper of SCRAPERS) {
+    if (isCircuitOpen(scraper.name)) {
+      logger.warn(`[circuit] ${scraper.name} circuit open — skipping for ${CIRCUIT_COOLDOWN_MS / 3600000}h cooldown`);
+      scrapersFailed++;
+      scraperErrors.push(`${scraper.name}: circuit open`);
+      continue;
+    }
     try {
       logger.info(`\n📡 Scraping: ${scraper.name}...`);
       const { listings, containerCount } = await scraper.module.scrape(config.filters.type);
+      console.log(`\n📡 Scraping: ${scraper.name}...`);
+      const { listings, containerCount } = await retry(
+        () => scraper.module.scrape(config.filters.type),
+        { attempts: 3, baseDelay: 2000 }
+      );
       if (listings.length === 0 && containerCount === 0) {
         await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
         console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
@@ -98,6 +122,8 @@ async function runPipeline() {
         logger.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
       }
       allListings.push(...listings);
+      const recovered = recordScraperSuccess(scraper.name);
+      if (recovered) logger.info(`[circuit] ${scraper.name} recovered after consecutive failures`);
       scrapersOk++;
     } catch (err) {
       logger.error(`❌ ${scraper.name} error: ${err.message}`);
@@ -121,6 +147,12 @@ async function runPipeline() {
         console.error(`❌ ${scraper.name} (${city}) error:`, err.message);
         await sendMessage(`❌ ${scraper.name} (${city}) scrape failed: ${err.message}`);
       }
+      const failures = recordScraperFailure(scraper.name);
+      if (failures >= CIRCUIT_OPEN_THRESHOLD) {
+        logger.warn(`[circuit] ${scraper.name} circuit opened after ${failures} consecutive failures`);
+      }
+      scrapersFailed++;
+      scraperErrors.push(`${scraper.name}: ${err.message}`);
     }
   }
 
@@ -314,6 +346,28 @@ async function main() {
 
   const healthPort = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : null;
   if (healthPort) startHealthServer(healthPort);
+  // Health endpoint
+  const healthPort = parseInt(process.env.HEALTH_PORT || "3000", 10);
+  createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/health") {
+      const scraperHealth = getAllScraperHealth();
+      const circuitOpen = scraperHealth
+        .filter(h => h.consecutive_failures >= CIRCUIT_OPEN_THRESHOLD &&
+          Date.now() - new Date(h.last_failure).getTime() < CIRCUIT_COOLDOWN_MS)
+        .map(h => h.key);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: circuitOpen.length === 0 ? "ok" : "degraded",
+        circuitOpen,
+        scrapers: scraperHealth,
+      }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  }).listen(healthPort, () => {
+    logger.info(`🩺 Health endpoint listening on :${healthPort}/health`);
+  });
 
   // Check if --run-now flag
   const runNow = process.argv.includes("--run-now");

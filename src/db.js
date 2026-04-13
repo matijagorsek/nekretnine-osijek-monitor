@@ -140,6 +140,22 @@ export function recordScraperSuccess(key) {
 }
 
 /**
+ * Get health record for a single scraper key
+ */
+export function getScraperHealth(key) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM scraper_health WHERE key = ?").get(key) || null;
+}
+
+/**
+ * Get health records for all scrapers
+ */
+export function getAllScraperHealth() {
+  const db = getDb();
+  return db.prepare("SELECT * FROM scraper_health ORDER BY key").all();
+}
+
+/**
  * Check if a listing already exists (by source+id or by fingerprint for cross-site dedup)
  */
 export function listingExists(id, fingerprint) {
