@@ -87,6 +87,23 @@ export const config = {
     priceDropMinPct: Number(process.env.ALERT_PRICE_DROP_MIN_PCT) || 0,
     priceDropMinEur: Number(process.env.ALERT_PRICE_DROP_MIN_EUR) || 0,
   },
+  notifyMode: (() => {
+    const mode = process.env.NOTIFY_MODE || "instant";
+    if (!["instant", "digest"].includes(mode)) {
+      console.error(`[config] NOTIFY_MODE must be "instant" or "digest", got "${mode}"`);
+      process.exit(1);
+    }
+    return mode;
+  })(),
+
+  digestHour: (() => {
+    const h = Number(process.env.DIGEST_HOUR ?? 8);
+    if (isNaN(h) || h < 0 || h > 23) {
+      console.error(`[config] DIGEST_HOUR must be 0–23, got "${process.env.DIGEST_HOUR}"`);
+      process.exit(1);
+    }
+    return h;
+  })(),
 
   triggers: (() => {
     const raw = process.env.NOTIFICATION_TRIGGERS;
