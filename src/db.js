@@ -103,6 +103,13 @@ function migrate() {
     db.exec("ALTER TABLE listings ADD COLUMN city TEXT");
   } catch (_) {
     // Column already exists
+  // Safe migrations for new tracking columns
+  const listingCols = db.prepare("PRAGMA table_info(listings)").all().map(c => c.name);
+  if (!listingCols.includes('last_seen')) {
+    db.exec("ALTER TABLE listings ADD COLUMN last_seen TEXT");
+  }
+  if (!listingCols.includes('seen_count')) {
+    db.exec("ALTER TABLE listings ADD COLUMN seen_count INTEGER DEFAULT 1");
   }
 }
 
@@ -188,7 +195,24 @@ export function insertListing(listing) {
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @image_url, @fingerprint)`
     `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, city, description, fingerprint)
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @city, @description, @fingerprint)`
+    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint, first_seen, last_seen)
+     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @first_seen, @last_seen)`
   ).run(listing);
+}
+
+/**
+ * Update last_seen and increment seen_count for an existing listing.
+ * Returns the previous last_seen value (to detect relisting gaps).
+ */
+export function updateListingTracking(id) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const existing = db.prepare("SELECT last_seen FROM listings WHERE id = ?").get(id);
+  const oldLastSeen = existing?.last_seen ?? null;
+  db.prepare(
+    "UPDATE listings SET last_seen = ?, seen_count = COALESCE(seen_count, 0) + 1 WHERE id = ?"
+  ).run(now, id);
+  return oldLastSeen;
 }
 
 /**

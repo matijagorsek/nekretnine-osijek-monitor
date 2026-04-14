@@ -238,7 +238,6 @@ export async function notifySimilarListing(newListing, favListing) {
 }
 
 function formatListing(l) {
-  const n = config.notification;
   const icon = l.type === "kuca" ? "🏡" : "🏢";
   const source = formatSource(l.source);
   const price = l.price ? `💰 <b>${l.price.toLocaleString("hr-HR")} €</b>` : "💰 <i>Cijena na upit</i>";
@@ -251,6 +250,12 @@ function formatListing(l) {
   const amenitiesLine = amenitiesList ? `🏷️ ${amenitiesList}` : null;
   const orientationLine = l.orientation ? `🧭 ${capitalize(l.orientation)}` : null;
 
+  let daysOnMarket = "";
+  if (l.first_seen) {
+    const days = Math.floor((Date.now() - new Date(l.first_seen).getTime()) / (1000 * 60 * 60 * 24));
+    daysOnMarket = days === 0 ? "📅 Danas na tržištu" : `📅 Na tržištu: <b>${days} ${days === 1 ? "dan" : "dana"}</b>`;
+  }
+
   const lines = [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
     price,
@@ -258,10 +263,20 @@ function formatListing(l) {
   if (details) lines.push(details);
   if (amenitiesLine) lines.push(amenitiesLine);
   if (orientationLine) lines.push(orientationLine);
+  if (daysOnMarket) lines.push(daysOnMarket);
   lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
   lines.push(`${"─".repeat(26)}`);
 
   return lines.join("\n");
+}
+
+/**
+ * Notify user that a previously seen listing has reappeared after a gap (possible relisting/price drop).
+ */
+export async function notifyRelisted(listing) {
+  const text = `🔁 <b>Oglas se vratio na tržište!</b>\n\n${formatListing(listing)}`;
+  const keyboard = [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${listing.id}` }]];
+  return sendMessageWithKeyboard(text, keyboard);
 }
 
 function formatSource(source) {
