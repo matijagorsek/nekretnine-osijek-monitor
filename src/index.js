@@ -52,6 +52,26 @@ import {
   notifyPriceDrop, notifySimilarListing,
 } from "./telegram.js";
 import { retry } from "./http.js";
+import { logger } from "./logger.js";
+import {
+  getDb, listingExists, insertListing, markNotified, getUnnotified,
+  recordScraperFailure, recordScraperSuccess,
+  getListingById, updateListingPrice,
+  addFavorite, removeFavorite, isFavorite, getFavorites,
+  addUserFilter, removeUserFilter, getUserFilters,
+  recordRunLog, getRecentRunLogs,
+  getSetting, setSetting, getRecentListings,
+} from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import {
+  notifyNewListings, sendTestMessage, sendMessage,
+  answerCallbackQuery, startPolling,
+  sendStats, sendFilterStatus,
+  notifyPriceDrop, notifySimilarListing,
+  sendStatus, sendFiltersConfig, sendListings,
+  sendPauseConfirmation, sendPauseOff,
+} from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -221,7 +241,10 @@ async function runPipeline() {
 
   logger.info(`✨ New unique listings: ${newListings.length}`);
 
-  // 4. Notify via configured channels
+  // 4. Notify via configured channels (skip if paused)
+  const pauseUntil = getSetting('pause_until');
+  const isPaused = pauseUntil && new Date(pauseUntil) > new Date();
+
   if (newListings.length > 0) {
     try {
       await notifyNewListings(newListings);
@@ -236,6 +259,21 @@ async function runPipeline() {
     logger.info(`📨 Telegram notification sent!`);
     if (config.notifyMode === "digest") {
       logger.info(`[digest] Accumulated ${newListings.length} listing(s) — will send at digest hour`);
+    } else {
+      try {
+        await notifyNewListings(newListings);
+      } catch (err) {
+        console.error("[telegram] Failed to send notifications:", err.message);
+      }
+      try {
+        markNotified(newListings.map((l) => l.id));
+      } catch (err) {
+        console.error("[db] Failed to mark listings as notified:", err.message);
+      }
+      console.log(`📨 Telegram notification sent!`);
+    }
+    if (isPaused) {
+      logger.info(`⏸ Notifications paused until ${pauseUntil} — skipping`);
     } else {
       try {
         await notifyNewListings(newListings);
@@ -387,6 +425,8 @@ async function main() {
   if (!config.channels.includes("telegram")) {
   let currentTask;
   if (!channels.includes("telegram")) {
+  // Start polling for Telegram button callbacks (fav/unfav) and commands
+  if (!config.channels.includes("telegram")) {
     logger.info("📡 Telegram polling skipped (telegram not in NOTIFICATION_CHANNELS)");
   } else startPolling(
     async (callbackQuery) => {
@@ -414,6 +454,42 @@ async function main() {
 
       // Only respond to the configured chat
       if (chatId !== config.telegram.chatId) return;
+
+      if (text === "/status") {
+        const logs = getRecentRunLogs(1);
+        const pauseUntil = getSetting('pause_until');
+        await sendStatus(logs, pauseUntil);
+        return;
+      }
+
+      if (text === "/filters") {
+        await sendFiltersConfig(config);
+        return;
+      }
+
+      if (text.startsWith("/pause")) {
+        const arg = text.slice(6).trim();
+        if (arg === "off") {
+          setSetting('pause_until', null);
+          await sendPauseOff();
+        } else {
+          const hours = parseFloat(arg);
+          if (!isNaN(hours) && hours > 0) {
+            const until = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+            setSetting('pause_until', until);
+            await sendPauseConfirmation(hours, until);
+          } else {
+            await sendMessage("Usage: /pause &lt;hours&gt; or /pause off");
+          }
+        }
+        return;
+      }
+
+      if (text === "/listings") {
+        const recent = getRecentListings(5);
+        await sendListings(recent);
+        return;
+      }
 
       if (text === "/stats") {
         const logs = getRecentRunLogs(5);
