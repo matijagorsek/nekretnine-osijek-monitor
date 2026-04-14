@@ -106,7 +106,7 @@ export function recordScraperSuccess(key) {
   const db = getDb();
   const now = new Date().toISOString();
   const existing = db.prepare("SELECT consecutive_failures FROM scraper_health WHERE key = ?").get(key);
-  const wasFailing = existing && existing.consecutive_failures > 0;
+  const wasFailing = !!(existing && existing.consecutive_failures > 0);
   db.prepare(
     `INSERT INTO scraper_health (key, consecutive_failures, last_success, first_failure)
      VALUES (?, 0, ?, NULL)
