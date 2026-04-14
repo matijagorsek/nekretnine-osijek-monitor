@@ -16,6 +16,7 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getRecentRunLogs, getScraperHealth } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth, getAllScraperHealth } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, updateListingTracking, getListingById } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
@@ -74,6 +75,7 @@ import {
   sendPauseConfirmation, sendPauseOff,
 } from "./telegram.js";
 import { notifyNewListings, notifyRelisted, sendTestMessage, sendMessage } from "./telegram.js";
+import { notifyNewListings, sendTestMessage, sendMessage, sendHealth } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -142,6 +144,12 @@ async function runPipeline() {
         recordScraperSuccess(scraper.name);
         scrapersOk++;
         logger.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
+        recordScraperFailure(scraper.name, 0);
+        scrapersFailed++;
+        scraperErrors.push(`${scraper.name}: 0 containers`);
+      } else {
+        recordScraperSuccess(scraper.name, listings.length);
+        scrapersOk++;
       }
       allListings.push(...listings);
       const recovered = recordScraperSuccess(scraper.name);
@@ -173,9 +181,20 @@ async function runPipeline() {
       if (failures >= CIRCUIT_OPEN_THRESHOLD) {
         logger.warn(`[circuit] ${scraper.name} circuit opened after ${failures} consecutive failures`);
       }
+      recordScraperFailure(scraper.name, 0);
       scrapersFailed++;
       scraperErrors.push(`${scraper.name}: ${err.message}`);
     }
+  }
+
+  // Alert if any scraper has hit 3 consecutive failures
+  const healthRows = getScraperHealth();
+  const criticalFailures = healthRows.filter((r) => r.consecutive_failures >= 3);
+  if (criticalFailures.length > 0) {
+    const alertLines = criticalFailures
+      .map((r) => `• ${r.key}: ${r.consecutive_failures} uzastopnih grešaka`)
+      .join("\n");
+    await sendMessage(`⚠️ <b>Upozorenje: scraper problem</b>\n\n${alertLines}`);
   }
 
   logger.info(`📊 Total raw listings: ${allListings.length}`);
@@ -547,6 +566,9 @@ async function main() {
       if (text.startsWith("/clearfilter")) {
         clearAllFilterOverrides();
         await sendMessage("✅ Filter overrides cleared. Using env-var defaults.");
+      if (text === "/health") {
+        const rows = getScraperHealth();
+        await sendHealth(rows);
         return;
       }
 

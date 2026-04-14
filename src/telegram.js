@@ -519,6 +519,20 @@ export async function sendPauseConfirmation(hours, until) {
  */
 export async function sendPauseOff() {
   return sendMessage("▶️ <b>Notifications resumed.</b>");
+ * Send per-scraper health dashboard
+ */
+export async function sendHealth(rows) {
+  if (!rows.length) {
+    return sendMessage("🩺 <b>Scraper Health</b>\n\nNema podataka.");
+  }
+  const lines = rows.map((r) => {
+    const status = r.consecutive_failures === 0 ? "✅" : r.consecutive_failures >= 3 ? "🔴" : "⚠️";
+    const lastSeen = r.last_success ? new Date(r.last_success).toLocaleString("hr-HR") : "nikad";
+    const countInfo = r.last_listing_count != null ? ` • ${r.last_listing_count} oglasa` : "";
+    const failInfo = r.consecutive_failures > 0 ? ` • <b>${r.consecutive_failures} uzastopnih grešaka</b>` : "";
+    return `${status} <b>${escapeHtml(r.key)}</b>${failInfo}${countInfo}\n   Zadnji uspjeh: ${lastSeen}`;
+  });
+  return sendMessage(`🩺 <b>Scraper Health</b>\n\n${lines.join("\n\n")}`);
 }
 
 /**
