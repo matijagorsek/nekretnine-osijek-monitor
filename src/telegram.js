@@ -213,12 +213,17 @@ function formatListing(l) {
   const location = l.location ? `📍 ${capitalize(l.location)}` : "";
 
   const details = [size, rooms, location].filter(Boolean).join("  •  ");
+  const amenitiesList = l.amenities ? JSON.parse(l.amenities).join(", ") : null;
+  const amenitiesLine = amenitiesList ? `🏷️ ${amenitiesList}` : null;
+  const orientationLine = l.orientation ? `🧭 ${capitalize(l.orientation)}` : null;
 
   const lines = [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
     price,
   ];
   if (details) lines.push(details);
+  if (amenitiesLine) lines.push(amenitiesLine);
+  if (orientationLine) lines.push(orientationLine);
   lines.push(`🔗 <a href="${l.url}">Otvori oglas</a>  <i>(${source})</i>`);
   lines.push(`${"─".repeat(26)}`);
 

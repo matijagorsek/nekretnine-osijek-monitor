@@ -61,6 +61,24 @@ export function applyFilters(listings) {
       if (!matches) return false;
     }
 
+    // Amenities filter — listing must mention all required amenities
+    if (filters.amenities.length > 0) {
+      const listingAmenities = l.amenities
+        ? JSON.parse(l.amenities).map((a) => a.toLowerCase())
+        : [];
+      const hasAll = filters.amenities.every((required) =>
+        listingAmenities.some((a) => a.includes(required) || required.includes(a))
+      );
+      if (!hasAll) return false;
+    }
+
+    // Orientation filter — listing orientation must be one of the allowed values
+    if (filters.orientations.length > 0) {
+      if (!l.orientation) return false;
+      const orient = l.orientation.toLowerCase();
+      if (!filters.orientations.some((o) => orient.includes(o) || o.includes(orient))) return false;
+    }
+
     return true;
   });
 }

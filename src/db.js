@@ -69,6 +69,14 @@ function migrate() {
       last_success TEXT
     );
   `);
+
+  // Additive migrations — ignore errors if columns already exist
+  for (const sql of [
+    "ALTER TABLE listings ADD COLUMN amenities TEXT",
+    "ALTER TABLE listings ADD COLUMN orientation TEXT",
+  ]) {
+    try { db.exec(sql); } catch (_) { /* column already exists */ }
+  }
 }
 
 /**
@@ -131,8 +139,8 @@ export function listingExists(id, fingerprint) {
 export function insertListing(listing) {
   const db = getDb();
   db.prepare(
-    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint)
-     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint)`
+    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint, amenities, orientation)
+     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @amenities, @orientation)`
   ).run(listing);
 }
 
