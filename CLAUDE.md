@@ -4,7 +4,7 @@ Stack: JavaScript
 
 <!-- BRAIN-LEARNED-RULES-START -->
 ## 🧠 Brain-learned rules
-_Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually._
+_Auto-updated by Brain Platform on 2026-04-14. Do not edit this section manually._
 
 ### ✅ Apply these patterns
 - **Environment variables for all runtime configuration** (this project)
@@ -20,13 +20,13 @@ _Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually
 - **Monitoring and notification systems dominate portfolio** (this project)
   → Extract shared scaffolding (scheduler, notifier, health-check endpoint, .gitignore template) into a portfolio-wide starter template to avoid reinventing the same gaps in every new project
 - **Use environment variables for runtime configuration** (this project)
-  → Continue using environment variables for runtime configuration, but ensure proper validation and error handling
+  → Continue using environment variables for runtime configuration, but ensure proper validation and error handling.
 - **Use webhook and event-driven external integrations** (this project)
-  → Use webhooks and events for external integrations
+  → Use webhooks and event-driven integrations for external interactions, but ensure proper error handling and security measures.
 - **Use environment variables for runtime configuration** (this project)
   → Continue using environment variables for runtime configuration, but ensure proper validation and error handling
 - **Build monitoring and notification systems** (this project)
-  → Consider implementing monitoring and notification systems with proper error handling and logging.
+  → Continue building monitoring and notification systems, but ensure proper error handling and security measures.
 - **Missing environment variable validation** (this project)
   → Implement environment variable validation to prevent errors and security vulnerabilities
 - **Use webhook and event-driven external integrations** (this project)
@@ -36,17 +36,25 @@ _Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually
 - **Use Telegram as primary notification channel** (this project)
   → Consider using multiple notification channels for better redundancy and reliability
 - **Use environment variables for runtime configuration** (this project)
-  → Continue using environment variables for runtime configuration
+  → Use environment variables for all runtime configuration
 - **Inadequate environment variable validation** (this project)
   → Implement proper environment variable validation to prevent errors and security vulnerabilities.
 - **Inadequate startup environment variable validation** (this project)
-  → Implement thorough startup environment variable validation
+  → Validate all environment variables at startup
 - **Unhandled exceptions and rejections** (this project)
-  → Implement proper exception and rejection handling
+  → Implement proper handling for exceptions and rejections to prevent errors and security issues.
+- **Inadequate environment variable validation** (this project)
+  → Implement proper validation for environment variables to prevent errors and security vulnerabilities.
+- **Missing .env.example file** (6 projects)
+  → Include a .env.example file to facilitate setup and configuration.
 - **Monitoring & notification systems dominate the portfolio** (this project)
   → Extract a shared notification/alerting library to avoid duplicating Telegram, webhook, and polling logic across projects.
 - **Webhook and event-driven external integrations** (this project)
   → Continue using webhook and event-driven external integrations
+- **Use environment variables for runtime configuration** (this project)
+  → Continue using environment variables for runtime configuration, but ensure proper validation and documentation.
+- **Unhandled exceptions and rejections** (4 projects)
+  → Implement proper handling for uncaught exceptions and rejections to prevent errors and security vulnerabilities.
 - **Environment variables for runtime configuration** (this project)
   → Add a startup validation step in every project that asserts required env vars are present and well-typed before any server or process starts. Commit a .env.example to every repo.
 - **Projects are monitoring or notification systems** (this project)
@@ -63,14 +71,20 @@ _Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually
   → Adopt a shared agent/worker scaffold (health-check endpoint, structured logging, graceful shutdown) to avoid reinventing the same plumbing in each project.
 - **Monitoring and notification systems dominate portfolio** (this project)
   → Extract a shared notification-dispatch layer (Telegram, webhook) to avoid duplicating auth, retry, and rate-limit logic across projects.
+- **Use Telegram as primary notification channel** (this project)
+  → Consider using multiple notification channels for better reliability and flexibility.
 - **Inadequate error handling and logging** (this project)
   → Implement proper error handling and logging mechanisms to prevent security vulnerabilities
+- **Use webhook and event-driven external integrations** (5 projects)
+  → Continue using webhook and event-driven external integrations, but ensure proper validation and error handling
 - **Telegram as primary notification channel** (this project)
   → Centralise bot scaffolding (auth guard, error handler, rate limiter) into a shared library so all three projects inherit fixes instead of each re-implementing the same gaps.
 - **Telegram used as primary notification channel** (3 projects)
   → Build a single hardened Telegram wrapper with send-failure logging, chat-ID allowlist enforcement, and credential management via env vars.
 - **Monitoring and notification systems** (this project)
   → Use monitoring and notification systems for system health
+- **Projects are monitoring or notification systems** (this project)
+  → Consider implementing standard monitoring and notification patterns and best practices for these types of systems
 - **Insecure error handling** (this project)
   → Implement proper error handling mechanisms, including try-catch blocks and error logging
 
@@ -197,10 +211,14 @@ _Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually
   → Move every authorization check to the server. The client UI is cosmetic; any route that mutates state must re-verify the caller's role on every request, independent of what the client claims.
 - **Vulnerability details written to world-readable files** (2 projects)
   → Write sensitive operational files with 0o600. Consider whether they need to persist on disk at all versus staying in memory or a proper secrets store.
+- **Silent failures in webhook handlers** (4 projects)
+  → Implement proper error handling and logging for webhook handlers.
 - **Webhook handler fails open** (4 projects)
   → Validate and verify incoming webhook requests
 - **Uncaught exceptions and rejections** (seen here)
   → Implement proper error handling and logging mechanisms to prevent security vulnerabilities
+- **Webhook handler fails open when secret is absent or invalid** (5 projects)
+  → Implement proper security checks and error handling for webhook handlers.
 - **Unbounded resource accumulation without housekeeping** (3 projects)
   → Add automated housekeeping: a cron to delete core files older than 24h, git gc scheduled weekly, and log rotation. For epg-iptv, add a pre-commit validation hook to prevent committing EPG data files before the fix branch merges.
 - **Secrets unguarded or leaked into git history** (seen here)
@@ -293,6 +311,8 @@ _Auto-updated by Brain Platform on 2026-04-12. Do not edit this section manually
   → Define a done-definition for each finding: what command or test output proves the issue is closed. Link that evidence in the commit message. A fix that cannot be verified is not a fix.
 - **Fix commits are documentation-only** (seen here)
   → Ensure fix commits actually change code
+- **Silent env-var renames break existing deployments** (seen here)
+  → Implement deprecation paths for environment variable renames to prevent breakages.
 - **Missing centralized error handling and logging** (seen here)
   → Implement centralized error handling and logging
 

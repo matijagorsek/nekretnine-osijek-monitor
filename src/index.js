@@ -202,14 +202,24 @@ async function runPipeline() {
   // 2. Apply filters and sort
   const filtered = applySort(applyFilters(allListings));
   logger.info(`🔍 After filters: ${filtered.length}`);
+  // 2. Build search profiles from config (fall back to single default profile)
+  const profiles = config.searchProfiles
+    ? config.searchProfiles.map((p) => ({ ...config.filters, ...p }))
+    : [{ name: null, ...config.filters }];
 
-  // 3. Deduplicate and check for new ones
-  const newListings = [];
+  // 3. Deduplicate across all profiles and collect new listings per profile
   const existingForDedup = [];
+  const insertedIds = new Set();
+  const priceDropChecked = new Set();
+  const newListingsByProfile = [];
+  let totalFiltered = 0;
 
-  for (const listing of filtered) {
-    const fingerprint = generateFingerprint(listing);
-    listing.fingerprint = fingerprint;
+  for (const profile of profiles) {
+    const filtered = applySort(applyFilters(allListings, profile), profile);
+    const profileLabel = profile.name ? ` [${profile.name}]` : "";
+    console.log(`🔍 After filters${profileLabel}: ${filtered.length}`);
+    totalFiltered += filtered.length;
+    const profileNew = [];
 
     // Check DB for exact match
     if (listingExists(listing.id, fingerprint)) {
@@ -250,8 +260,46 @@ async function runPipeline() {
           await notifyPriceDrop(listing, existing.price, isFavorite(listing.id), history);
           await new Promise((r) => setTimeout(r, 100));
         }
+    for (const listing of filtered) {
+      const fingerprint = generateFingerprint(listing);
+      listing.fingerprint = fingerprint;
+
+      if (listingExists(listing.id, fingerprint)) {
+        if (listing.price != null && !priceDropChecked.has(listing.id)) {
+          priceDropChecked.add(listing.id);
+          const existing = getListingById(listing.id);
+          if (existing && existing.price != null && listing.price < existing.price) {
+            await notifyPriceDrop(listing, existing.price, isFavorite(listing.id));
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          if (existing && existing.price !== listing.price) {
+            updateListingPrice(listing.id, listing.price);
+          }
+        }
+        continue;
       }
-      continue;
+
+      if (insertedIds.has(listing.id)) {
+        // Already inserted this run from another profile — still new for this profile
+        profileNew.push(listing);
+        continue;
+      }
+
+      const { isDupe } = isDuplicate(listing, existingForDedup, config.dedupeThreshold);
+      if (isDupe) {
+        logger.info(`🔄 Duplikat preskočen: "${listing.title}" (${listing.source})`);
+        continue;
+      }
+
+      profileNew.push(listing);
+      existingForDedup.push(listing);
+      insertedIds.add(listing.id);
+
+      try {
+        insertListing(listing);
+      } catch (err) {
+        console.error(`[db] Failed to insert listing "${listing.id}":`, err.message);
+      }
     }
 
     // Check against other new listings in this batch (cross-site dedup)
@@ -277,22 +325,31 @@ async function runPipeline() {
     } catch (err) {
       logger.error(`[db] Failed to insert listing "${listing.id}": ${err.message}`);
     }
+    newListingsByProfile.push({ profile, listings: profileNew });
   }
 
-  logger.info(`✨ New unique listings: ${newListings.length}`);
+  const totalNew = insertedIds.size;
+  logger.info(`✨ New unique listings: ${totalNew}`);
 
   // 4. Notify via configured channels (skip if paused)
   const pauseUntil = getSetting('pause_until');
   const isPaused = pauseUntil && new Date(pauseUntil) > new Date();
 
   if (newListings.length > 0) {
+  // 4. Notify per profile via configured channels
+  let anyNew = false;
+  for (const { profile, listings: profileNew } of newListingsByProfile) {
+    if (profileNew.length === 0) continue;
+    anyNew = true;
+    const profileLabel = profile.name ? ` [${profile.name}]` : "";
     try {
-      await notifyNewListings(newListings);
+      await notifyNewListings(profileNew, profile.name);
     } catch (err) {
       logger.error(`[telegram] Failed to send notifications: ${err.message}`);
+      console.error(`[notifier] Failed to send notifications${profileLabel}:`, err.message);
     }
     try {
-      markNotified(newListings.map((l) => l.id));
+      markNotified(profileNew.map((l) => l.id));
     } catch (err) {
       logger.error(`[db] Failed to mark listings as notified: ${err.message}`);
     }
@@ -346,9 +403,19 @@ async function runPipeline() {
   }
 
   // 6. Check new listings for similarity to favorites
+      console.error(`[db] Failed to mark listings as notified${profileLabel}:`, err.message);
+    }
+    console.log(`📨 Notification sent${profileLabel}!`);
+  }
+  if (!anyNew) {
+    logger.info(`😴 Nema novih nekretnina danas.`);
+  }
+
+  // 5. Check new listings for similarity to favorites
+  const allNewListings = newListingsByProfile.flatMap(({ listings }) => listings);
   const favorites = getFavorites();
-  if (favorites.length > 0 && newListings.length > 0) {
-    for (const newListing of newListings) {
+  if (favorites.length > 0 && allNewListings.length > 0) {
+    for (const newListing of allNewListings) {
       for (const fav of favorites) {
         if (newListing.id === fav.id) continue;
         const { isDupe, matchedWith } = isDuplicate(newListing, [fav], config.dedupeThreshold);
@@ -368,8 +435,8 @@ async function runPipeline() {
     scrapersOk,
     scrapersFailed,
     totalRaw: allListings.length,
-    afterFilters: filtered.length,
-    newListings: newListings.length,
+    afterFilters: totalFiltered,
+    newListings: totalNew,
     scraperErrors: scraperErrors.length > 0 ? scraperErrors.join("; ") : null,
   });
 

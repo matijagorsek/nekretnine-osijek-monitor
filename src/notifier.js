@@ -65,18 +65,19 @@ async function sendWebhookNotification(event, payload) {
 
 const channels = config.channels;
 
-export async function notifyNewListings(listings) {
+export async function notifyNewListings(listings, profileName = null) {
+  const profileLabel = profileName ? ` — ${profileName}` : "";
   const tasks = [];
-  if (channels.includes("telegram")) tasks.push(telegram.notifyNewListings(listings));
+  if (channels.includes("telegram")) tasks.push(telegram.notifyNewListings(listings, profileName));
   if (channels.includes("email")) {
     const html =
-      `<h2>🏠 Nove nekretnine u Osijeku</h2>` +
+      `<h2>🏠 Nove nekretnine u Osijeku${profileLabel}</h2>` +
       `<p>Pronađeno: <b>${listings.length}</b> novih oglasa — ` +
       `${new Date().toLocaleDateString("hr-HR")}</p>` +
       `<ul>${buildListingsHtml(listings)}</ul>`;
-    tasks.push(sendEmailNotification("🏠 Nove nekretnine u Osijeku", html));
+    tasks.push(sendEmailNotification(`🏠 Nove nekretnine u Osijeku${profileLabel}`, html));
   }
-  if (channels.includes("webhook")) tasks.push(sendWebhookNotification("new_listings", listings));
+  if (channels.includes("webhook")) tasks.push(sendWebhookNotification("new_listings", { listings, profile: profileName }));
   await Promise.allSettled(tasks);
 }
 

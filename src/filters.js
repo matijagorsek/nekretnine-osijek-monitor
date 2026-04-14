@@ -21,6 +21,7 @@ export function applyFilters(listings) {
   const roomsMin = ov.roomsMin !== undefined ? ov.roomsMin : filters.roomsMin;
   const roomsMax = ov.roomsMax !== undefined ? ov.roomsMax : filters.roomsMax;
 
+export function applyFilters(listings, filters = config.filters) {
   return listings.filter((l) => {
     // City filter - restrict to configured cities
     if (filters.cities.length > 0 && l.city) {
@@ -49,7 +50,7 @@ export function applyFilters(listings) {
     }
 
     // Location filter (if specific locations are set, only apply to primary city)
-    if (filters.locations.length > 0 && l.location) {
+    if (filters.locations && filters.locations.length > 0 && l.location) {
       if (!l.city || l.city === filters.city) {
         const locLower = l.location.toLowerCase();
         const matches = filters.locations.some(
@@ -60,7 +61,7 @@ export function applyFilters(listings) {
     }
 
     // Neighborhood filter (only apply to primary city)
-    if (filters.neighborhoods.length > 0 && l.location) {
+    if (filters.neighborhoods && filters.neighborhoods.length > 0 && l.location) {
       if (!l.city || l.city === filters.city) {
         const locLower = l.location.toLowerCase();
         const matches = filters.neighborhoods.some(
@@ -70,17 +71,8 @@ export function applyFilters(listings) {
       }
     }
 
-    // Neighborhood filter
-    if (filters.neighborhoods.length > 0 && l.location) {
-      const locLower = l.location.toLowerCase();
-      const matches = filters.neighborhoods.some(
-        (n) => locLower.includes(n) || n.includes(locLower)
-      );
-      if (!matches) return false;
-    }
-
     // Amenities filter — listing must mention all required amenities
-    if (filters.amenities.length > 0) {
+    if (filters.amenities && filters.amenities.length > 0) {
       const listingAmenities = l.amenities
         ? JSON.parse(l.amenities).map((a) => a.toLowerCase())
         : [];
@@ -91,11 +83,12 @@ export function applyFilters(listings) {
     }
 
     // Orientation filter — listing orientation must be one of the allowed values
-    if (filters.orientations.length > 0) {
+    if (filters.orientations && filters.orientations.length > 0) {
       if (!l.orientation) return false;
       const orient = l.orientation.toLowerCase();
       if (!filters.orientations.some((o) => orient.includes(o) || o.includes(orient))) return false;
     }
+
 
     return true;
   });
@@ -128,8 +121,8 @@ export function matchesTrigger(listing, trigger) {
 /**
  * Sort listings by the configured field and order.
  */
-export function applySort(listings) {
-  const { sortBy, sortOrder } = config.filters;
+export function applySort(listings, filters = config.filters) {
+  const { sortBy, sortOrder } = filters;
 
   if (!sortBy || sortBy === "none") return listings;
 
