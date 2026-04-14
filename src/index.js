@@ -17,9 +17,10 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth, getAllScraperHealth } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, updateListingTracking, getListingById } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs, getWeeklyDigestStats } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
-import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
+import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, sendWeeklyDigest, answerCallbackQuery, startPolling } from "./telegram.js";
 import { logger } from "./logger.js";
 import { logger } from "./logger.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites, addUserFilter, removeUserFilter, getUserFilters, getRecentRunLogs, recordRunLog } from "./db.js";
@@ -739,6 +740,20 @@ async function main() {
     });
     logger.info(`📋 Digest mode: summary will be sent daily at ${config.digestHour}:00`);
   }
+  // Weekly digest cron (default: Sunday 09:00)
+  logger.info(`📊 Weekly digest scheduled: "${config.weeklyDigestCron}"`);
+
+  cron.schedule(config.weeklyDigestCron, async () => {
+    try {
+      const stats = getWeeklyDigestStats();
+      await sendWeeklyDigest(stats);
+      logger.info("📊 Weekly digest sent");
+    } catch (err) {
+      logger.error(`💥 Weekly digest error: ${err.message}`, err.stack);
+    }
+  }, {
+    timezone: "Europe/Zagreb",
+  });
 
   logger.info("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
   logger.info("   Tip: use 'npm run scrape' to run immediately.");

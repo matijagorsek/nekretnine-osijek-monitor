@@ -405,6 +405,39 @@ export function setSetting(key, value) {
 export function getRecentListings(limit = 5) {
   const db = getDb();
   return db.prepare("SELECT * FROM listings ORDER BY first_seen DESC LIMIT ?").all(limit);
+ * Get aggregate market statistics for the trailing 7 days (weekly digest)
+ */
+export function getWeeklyDigestStats() {
+  const db = getDb();
+  const overall = db.prepare(`
+    SELECT COUNT(*) AS total,
+           AVG(price) AS avgPrice,
+           MIN(price) AS minPrice,
+           MAX(price) AS maxPrice,
+           SUM(CASE WHEN notified = 1 THEN 1 ELSE 0 END) AS notifiedCount
+    FROM listings
+    WHERE first_seen >= datetime('now', '-7 days')
+  `).get();
+
+  const bySource = db.prepare(`
+    SELECT source, COUNT(*) AS count, AVG(price) AS avgPrice
+    FROM listings
+    WHERE first_seen >= datetime('now', '-7 days')
+    GROUP BY source
+    ORDER BY count DESC
+  `).all();
+
+  const byLocation = db.prepare(`
+    SELECT location, COUNT(*) AS count, AVG(price) AS avgPrice
+    FROM listings
+    WHERE first_seen >= datetime('now', '-7 days')
+      AND location IS NOT NULL AND location != ''
+    GROUP BY location
+    ORDER BY count DESC
+    LIMIT 10
+  `).all();
+
+  return { ...overall, bySource, byLocation };
 }
 
 /**

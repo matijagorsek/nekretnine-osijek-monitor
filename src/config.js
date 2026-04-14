@@ -46,6 +46,7 @@ export const config = {
   },
 
   cron: process.env.CRON_SCHEDULE || "0 12 * * *",
+  weeklyDigestCron: process.env.WEEKLY_DIGEST_CRON || "0 9 * * 0",
 
   cities: process.env.CITIES
     ? process.env.CITIES.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
