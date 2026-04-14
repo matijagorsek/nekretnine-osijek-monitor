@@ -65,10 +65,17 @@ export const config = {
 
   triggers: (() => {
     const raw = process.env.NOTIFICATION_TRIGGERS;
-    if (!raw) return [];
+    if (!raw) {
+      console.error("[config] Missing required environment variable: NOTIFICATION_TRIGGERS");
+      process.exit(1);
+    }
     try {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) throw new Error("must be a JSON array");
+      if (parsed.length === 0) {
+        console.error("[config] NOTIFICATION_TRIGGERS must not be empty");
+        process.exit(1);
+      }
       return parsed;
     } catch (err) {
       console.error(`[config] Invalid NOTIFICATION_TRIGGERS JSON: ${err.message}`);
