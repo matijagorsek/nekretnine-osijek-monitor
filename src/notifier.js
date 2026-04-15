@@ -80,9 +80,9 @@ export async function notifyNewListings(listings) {
   await Promise.allSettled(tasks);
 }
 
-export async function notifyPriceDrop(listing, oldPrice, isFav = false) {
+export async function notifyPriceDrop(listing, oldPrice, isFav = false, priceHistory = []) {
   const tasks = [];
-  if (channels.includes("telegram")) tasks.push(telegram.notifyPriceDrop(listing, oldPrice, isFav));
+  if (channels.includes("telegram")) tasks.push(telegram.notifyPriceDrop(listing, oldPrice, isFav, priceHistory));
   if (channels.includes("email")) {
     const drop = oldPrice - listing.price;
     const pct = ((drop / oldPrice) * 100).toFixed(1);

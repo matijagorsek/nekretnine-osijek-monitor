@@ -72,6 +72,14 @@ function migrate() {
       first_failure TEXT,
       last_success TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS listing_price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      listing_id TEXT NOT NULL,
+      price REAL NOT NULL,
+      observed_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_price_history_listing ON listing_price_history(listing_id, observed_at);
   `);
 
   // Additive migrations — ignore errors if columns already exist
@@ -198,6 +206,28 @@ export function getListingById(id) {
 export function updateListingPrice(id, newPrice) {
   const db = getDb();
   db.prepare("UPDATE listings SET price = ? WHERE id = ?").run(newPrice, id);
+}
+
+/**
+ * Record a price observation for a listing
+ */
+export function insertPriceHistory(listingId, price) {
+  const db = getDb();
+  db.prepare(
+    "INSERT INTO listing_price_history (listing_id, price) VALUES (?, ?)"
+  ).run(listingId, price);
+}
+
+/**
+ * Get all price history entries for a listing, oldest first
+ */
+export function getPriceHistory(listingId) {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT price, observed_at FROM listing_price_history WHERE listing_id = ? ORDER BY observed_at ASC"
+    )
+    .all(listingId);
 }
 
 /**
