@@ -466,6 +466,39 @@ export async function sendStatus(logs, pauseUntil) {
     text += `Scrapers: ${lastRun.scrapers_ok}✅ ${lastRun.scrapers_failed}❌`;
   } else {
     text += "<i>No runs recorded yet.</i>";
+ * Send a weekly market summary digest
+ */
+export async function sendWeeklyDigest(stats) {
+  const { total, avgPrice, minPrice, maxPrice, notifiedCount, bySource, byLocation } = stats;
+  const dateLabel = new Date().toLocaleDateString("hr-HR", { day: "numeric", month: "long", year: "numeric" });
+
+  let text = `📊 <b>Tjedni sažetak tržišta nekretnina</b>\n`;
+  text += `📅 Tjedan do ${dateLabel}\n`;
+  text += `${"═".repeat(28)}\n\n`;
+  text += `📋 <b>Ukupno novih oglasa:</b> ${total}\n`;
+  text += `🔔 <b>Odgovaralo filteru:</b> ${notifiedCount}\n`;
+
+  if (avgPrice != null) {
+    text += `\n💰 <b>Prosječna cijena:</b> ${Math.round(avgPrice).toLocaleString("hr-HR")} €\n`;
+    if (minPrice != null) text += `  ↓ Min: ${Math.round(minPrice).toLocaleString("hr-HR")} €\n`;
+    if (maxPrice != null) text += `  ↑ Max: ${Math.round(maxPrice).toLocaleString("hr-HR")} €\n`;
+  }
+
+  if (bySource.length > 0) {
+    text += `\n📡 <b>Po izvoru:</b>\n`;
+    for (const row of bySource) {
+      const src = formatSource(row.source);
+      const avg = row.avgPrice != null ? `  (⌀ ${Math.round(row.avgPrice).toLocaleString("hr-HR")} €)` : "";
+      text += `  • ${src}: <b>${row.count}</b>${avg}\n`;
+    }
+  }
+
+  if (byLocation.length > 0) {
+    text += `\n📍 <b>Po četvrti:</b>\n`;
+    for (const row of byLocation) {
+      const avg = row.avgPrice != null ? `  (⌀ ${Math.round(row.avgPrice).toLocaleString("hr-HR")} €)` : "";
+      text += `  • ${capitalize(row.location)}: <b>${row.count}</b>${avg}\n`;
+    }
   }
 
   return sendMessage(text);
