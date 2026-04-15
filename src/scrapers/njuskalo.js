@@ -85,6 +85,11 @@ function parseListings(html, type, city) {
         const rooms = extractRooms(title + " " + descText);
         const location = extractLocation(title + " " + descText, city);
 
+        // Extract thumbnail image
+        const imgEl = $el.find(".entity-thumbnail img, .EntityList-item--imageBox img, .entity-image img, img").first();
+        const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
+        const image_url = imgSrc && !imgSrc.startsWith("data:") ? imgSrc : null;
+
         const id = `${SOURCE}:${href.replace(/[^a-z0-9]/gi, "_")}`;
         const combinedText = title + " " + descText;
 
@@ -102,6 +107,7 @@ function parseListings(html, type, city) {
           description: descText.slice(0, 300),
           amenities: extractAmenities(combinedText),
           orientation: extractOrientation(combinedText),
+          image_url,
         });
       } catch (e) {
         logger.warn(`[njuskalo] Failed to parse listing: ${e.message}`);

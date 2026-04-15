@@ -27,6 +27,7 @@ function migrate() {
       location TEXT,
       type TEXT,
       description TEXT,
+      image_url TEXT,
       fingerprint TEXT,
       first_seen TEXT DEFAULT (datetime('now')),
       notified INTEGER DEFAULT 0
@@ -58,6 +59,7 @@ function migrate() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_fingerprint ON listings(fingerprint);
+    CREATE INDEX IF NOT EXISTS idx_image_url ON listings(image_url);
     CREATE INDEX IF NOT EXISTS idx_notified ON listings(notified);
     CREATE INDEX IF NOT EXISTS idx_first_seen ON listings(first_seen);
 
@@ -76,6 +78,11 @@ function migrate() {
     "ALTER TABLE listings ADD COLUMN orientation TEXT",
   ]) {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
+  // Migrate existing databases that don't have image_url yet
+  try {
+    db.exec("ALTER TABLE listings ADD COLUMN image_url TEXT");
+  } catch (_) {
+    // Column already exists
   }
 }
 
@@ -141,6 +148,8 @@ export function insertListing(listing) {
   db.prepare(
     `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint, amenities, orientation)
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @amenities, @orientation)`
+    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, image_url, fingerprint)
+     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @image_url, @fingerprint)`
   ).run(listing);
 }
 

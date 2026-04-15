@@ -24,6 +24,7 @@ const AGENCIES = [
       link: "a[href*='nekretnin'], a[href*='property'], a",
       title: "h2, h3, .title, .name",
       price: ".price, .cijena, [class*='price']",
+      image: ".property-image img, .card-image img, img",
     },
   },
   {
@@ -34,6 +35,7 @@ const AGENCIES = [
       link: "a[href*='nekretnin'], a[href*='property'], a",
       title: "h2, h3, .title",
       price: ".price, .cijena, [class*='price']",
+      image: ".property-image img, .card-image img, img",
     },
   },
   {
@@ -44,6 +46,7 @@ const AGENCIES = [
       link: "a[href*='nekretnin'], a",
       title: "h2, h3, .title",
       price: ".price, .cijena",
+      image: ".property-image img, .card-image img, img",
     },
   },
 ];
@@ -110,6 +113,13 @@ function parseGenericListings(html, agency) {
       const location = extractLocation(infoText);
       const type = guessType(infoText);
 
+      const imgSelector = selectors.image || "img";
+      const imgEl = $el.find(imgSelector).first();
+      const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
+      const rawImgUrl = imgSrc && !imgSrc.startsWith("data:") ? imgSrc : null;
+      const baseUrl = new URL(agency.url).origin;
+      const image_url = rawImgUrl && !rawImgUrl.startsWith("http") ? `${baseUrl}${rawImgUrl.startsWith("/") ? "" : "/"}${rawImgUrl}` : rawImgUrl;
+
       const id = `${SOURCE}:${agencyName.replace(/\s/g, "_")}:${href.replace(/[^a-z0-9]/gi, "_")}`;
 
       listings.push({
@@ -126,6 +136,7 @@ function parseGenericListings(html, agency) {
         description: infoText.slice(0, 300),
         amenities: extractAmenities(infoText),
         orientation: extractOrientation(infoText),
+        image_url,
       });
     } catch (e) {
       logger.warn(`[local:${agencyName}] Failed to parse listing: ${e.message}`);

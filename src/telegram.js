@@ -62,6 +62,34 @@ async function sendMessageWithKeyboard(text, inlineKeyboard, parseMode = "HTML")
 }
 
 /**
+ * Send a photo with a caption and inline keyboard
+ */
+async function sendPhotoWithKeyboard(photoUrl, caption, inlineKeyboard, parseMode = "HTML") {
+  try {
+    const resp = await fetch(`${API_BASE}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: config.telegram.chatId,
+        photo: photoUrl,
+        caption,
+        parse_mode: parseMode,
+        reply_markup: { inline_keyboard: inlineKeyboard },
+      }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      logger.error(`[telegram] sendPhoto failed: ${data.description}`);
+      return sendMessageWithKeyboard(caption, inlineKeyboard, parseMode);
+    }
+    return true;
+  } catch (err) {
+    logger.error(`[telegram] sendPhoto error: ${err.message}`);
+    return false;
+  }
+}
+
+/**
  * Answer a callback query (clears the loading spinner on the button)
  */
 export async function answerCallbackQuery(callbackQueryId, text) {
@@ -165,7 +193,9 @@ export async function notifyNewListings(listings, triggerName = null) {
   for (const listing of listings) {
     const text = formatListing(listing);
     const keyboard = [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${listing.id}` }]];
-    const ok = await sendMessageWithKeyboard(text, keyboard);
+    const ok = listing.image_url
+      ? await sendPhotoWithKeyboard(listing.image_url, text, keyboard)
+      : await sendMessageWithKeyboard(text, keyboard);
     if (ok) success++;
     await new Promise((r) => setTimeout(r, 100));
   }
