@@ -3,41 +3,48 @@ import { fetchPage, politeSleep } from "../http.js";
 
 const SOURCE = "4zida";
 
-const SEARCH_URLS = {
-  stan: "https://www.4zida.hr/prodaja-stanova/osijek",
-  kuca: "https://www.4zida.hr/prodaja-kuca/osijek",
-};
+function getUrls(city) {
+  return {
+    stan: `https://www.4zida.hr/prodaja-stanova/${city}`,
+    kuca: `https://www.4zida.hr/prodaja-kuca/${city}`,
+  };
+}
 
-export async function scrape(filterType = "all") {
+export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
+  let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
+  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     const url = SEARCH_URLS[type];
     if (!url) continue;
 
-    console.log(`[4zida] Scraping ${type}: ${url}`);
+    console.log(`[4zida] Scraping ${type} in ${city}: ${url}`);
     const html = await fetchPage(url);
     if (!html) {
       console.warn(`[4zida] Failed to fetch ${type}`);
       continue;
     }
 
-    const listings = parseListings(html, type);
+    const { listings, containerCount } = parseListings(html, type, city);
     results.push(...listings);
+    totalContainerCount += containerCount;
     console.log(`[4zida] Found ${listings.length} ${type} listings`);
 
     await politeSleep();
   }
 
-  return results;
+  return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
-  $(".property-card, .ad-card, .search-result-item, article[class*='property'], [class*='listing-card']").each((_, el) => {
+  const containers = $(".property-card, .ad-card, .search-result-item, article[class*='property'], [class*='listing-card']");
+  const containerCount = containers.length;
+  containers.each((_, el) => {
     try {
       const $el = $(el);
 
@@ -58,7 +65,7 @@ function parseListings(html, type) {
       const infoText = $el.text();
       const size = extractSize(infoText);
       const rooms = extractRooms(infoText);
-      const location = extractLocation(infoText);
+      const location = extractLocation(infoText, city);
 
       const imgEl = $el.find(".property-image img, .ad-image img, img").first();
       const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
@@ -77,6 +84,7 @@ function parseListings(html, type) {
         rooms,
         location,
         type,
+        city,
         description: infoText.slice(0, 300),
         amenities: extractAmenities(infoText),
         orientation: extractOrientation(infoText),
@@ -87,7 +95,7 @@ function parseListings(html, type) {
     }
   });
 
-  return listings;
+  return { listings, containerCount };
 }
 
 function parsePrice(text) {
@@ -163,4 +171,15 @@ function extractLocation(text) {
   const lower = text.toLowerCase();
   for (const a of areas) if (lower.includes(a)) return a;
   return "Osijek";
+function extractLocation(text, city = "osijek") {
+  if (city === "osijek") {
+    const areas = [
+      "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
+      "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
+      "josipovac", "briješće", "brijesce", "nemetinska",
+    ];
+    const lower = text.toLowerCase();
+    for (const a of areas) if (lower.includes(a)) return a;
+  }
+  return city.charAt(0).toUpperCase() + city.slice(1);
 }

@@ -3,41 +3,48 @@ import { fetchPage, politeSleep } from "../http.js";
 
 const SOURCE = "oglasnik";
 
-const SEARCH_URLS = {
-  stan: "https://www.oglasnik.hr/nekretnine/stambeni-prostori/stanovi/prodaja/?location=osijek",
-  kuca: "https://www.oglasnik.hr/nekretnine/kuce/prodaja/?location=osijek",
-};
+function getUrls(city) {
+  return {
+    stan: `https://www.oglasnik.hr/nekretnine/stambeni-prostori/stanovi/prodaja/?location=${city}`,
+    kuca: `https://www.oglasnik.hr/nekretnine/kuce/prodaja/?location=${city}`,
+  };
+}
 
-export async function scrape(filterType = "all") {
+export async function scrape(filterType = "all", city = "osijek") {
   const results = [];
+  let totalContainerCount = 0;
   const types = filterType === "all" ? ["stan", "kuca"] : [filterType];
+  const SEARCH_URLS = getUrls(city);
 
   for (const type of types) {
     const url = SEARCH_URLS[type];
     if (!url) continue;
 
-    console.log(`[oglasnik] Scraping ${type}: ${url}`);
+    console.log(`[oglasnik] Scraping ${type} in ${city}: ${url}`);
     const html = await fetchPage(url);
     if (!html) {
       console.warn(`[oglasnik] Failed to fetch ${type}`);
       continue;
     }
 
-    const listings = parseListings(html, type);
+    const { listings, containerCount } = parseListings(html, type, city);
     results.push(...listings);
+    totalContainerCount += containerCount;
     console.log(`[oglasnik] Found ${listings.length} ${type} listings`);
 
     await politeSleep();
   }
 
-  return results;
+  return { listings: results, containerCount: totalContainerCount };
 }
 
-function parseListings(html, type) {
+function parseListings(html, type, city = "osijek") {
   const $ = cheerio.load(html);
   const listings = [];
 
-  $(".oglas-item, .listing-item, .ad-item, article.oglas, [class*='oglas-']").each((_, el) => {
+  const containers = $(".oglas-item, .listing-item, .ad-item, article.oglas, [class*='oglas-']");
+  const containerCount = containers.length;
+  containers.each((_, el) => {
     try {
       const $el = $(el);
 
@@ -58,7 +65,7 @@ function parseListings(html, type) {
       const infoText = $el.text();
       const size = extractSize(infoText);
       const rooms = extractRooms(infoText);
-      const location = extractLocation(infoText);
+      const location = extractLocation(infoText, city);
 
       const imgEl = $el.find(".oglas-slika img, .ad-image img, img").first();
       const imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || null;
@@ -77,6 +84,7 @@ function parseListings(html, type) {
         rooms,
         location,
         type,
+        city,
         description: infoText.slice(0, 300),
         amenities: extractAmenities(infoText),
         orientation: extractOrientation(infoText),
@@ -87,7 +95,7 @@ function parseListings(html, type) {
     }
   });
 
-  return listings;
+  return { listings, containerCount };
 }
 
 function parsePrice(text) {
@@ -163,4 +171,15 @@ function extractLocation(text) {
   const lower = text.toLowerCase();
   for (const a of areas) if (lower.includes(a)) return a;
   return "Osijek";
+function extractLocation(text, city = "osijek") {
+  if (city === "osijek") {
+    const areas = [
+      "gornji grad", "donji grad", "retfala", "sjenjak", "jug ii", "jug 2",
+      "centar", "višnjevac", "visnjevac", "tvrđa", "tvrda", "čepin", "cepin",
+      "josipovac", "briješće", "brijesce", "nemetinska",
+    ];
+    const lower = text.toLowerCase();
+    for (const a of areas) if (lower.includes(a)) return a;
+  }
+  return city.charAt(0).toUpperCase() + city.slice(1);
 }
