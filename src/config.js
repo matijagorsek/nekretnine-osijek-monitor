@@ -137,4 +137,17 @@ export const config = {
       process.exit(1);
     }
   })(),
+
+  searchProfiles: (() => {
+    const raw = process.env.SEARCH_PROFILES;
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("must be a JSON array");
+      return parsed;
+    } catch (err) {
+      console.error(`[config] Invalid SEARCH_PROFILES JSON: ${err.message}`);
+      process.exit(1);
+    }
+  })(),
 };

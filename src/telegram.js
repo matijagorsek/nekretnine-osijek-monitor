@@ -168,7 +168,8 @@ export async function notifyNewListings(listings, triggerName = null) {
   }
 
   // Header message
-  const header = `🏠 <b>Nove nekretnine u Osijeku</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
+  const profileLabel = triggerName ? ` — ${triggerName}` : "";
+  const header = `🏠 <b>Nove nekretnine u Osijeku${profileLabel}</b>\n📅 ${new Date().toLocaleDateString("hr-HR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
 
   // Format each listing
   const formatted = listings.map((l) => formatListing(l));
