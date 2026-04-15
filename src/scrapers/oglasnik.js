@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { fetchPage, politeSleep } from "../http.js";
+import { logger } from "../logger.js";
 
 const SOURCE = "oglasnik";
 
@@ -33,6 +34,23 @@ export async function scrape(filterType = "all", city = "osijek") {
     console.log(`[oglasnik] Found ${listings.length} ${type} listings`);
 
     await politeSleep();
+    try {
+      logger.info(`[oglasnik] Scraping ${type}: ${url}`);
+      const html = await fetchPage(url);
+      if (!html) {
+        logger.warn(`[oglasnik] Failed to fetch ${type}`);
+        continue;
+      }
+
+      const { listings, containerCount } = parseListings(html, type);
+      results.push(...listings);
+      totalContainerCount += containerCount;
+      logger.info(`[oglasnik] Found ${listings.length} ${type} listings`);
+
+      await politeSleep();
+    } catch (e) {
+      logger.error(`[oglasnik] Error scraping ${type}: ${e.message}`);
+    }
   }
 
   return { listings: results, containerCount: totalContainerCount };
@@ -91,7 +109,7 @@ function parseListings(html, type, city = "osijek") {
         image_url,
       });
     } catch (e) {
-      // Skip malformed listings
+      logger.warn(`[oglasnik] Failed to parse listing: ${e.message}`);
     }
   });
 

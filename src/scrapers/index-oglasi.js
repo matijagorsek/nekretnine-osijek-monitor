@@ -29,21 +29,15 @@ export async function scrape(filterType = "all", city = "osijek") {
         continue;
       }
 
-      const listings = parseListings(html, type, city);
+      const { listings, containerCount } = parseListings(html, type, city);
       results.push(...listings);
+      totalContainerCount += containerCount;
       logger.info(`[index] Found ${listings.length} ${type} listings`);
 
       await politeSleep();
     } catch (e) {
       logger.error(`[index] Error scraping ${type}: ${e.message}`);
     }
-
-    const { listings, containerCount } = parseListings(html, type);
-    results.push(...listings);
-    totalContainerCount += containerCount;
-    console.log(`[index] Found ${listings.length} ${type} listings`);
-
-    await politeSleep();
   }
 
   return { listings: results, containerCount: totalContainerCount };
