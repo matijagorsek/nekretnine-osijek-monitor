@@ -341,6 +341,56 @@ export async function sendStats(logs) {
 }
 
 /**
+ * Send a daily digest grouping new listings by neighbourhood with a best-value pick.
+ */
+export async function sendDigest(listings) {
+  if (!listings.length) return;
+
+  // Group by location
+  const groups = {};
+  for (const l of listings) {
+    const key = l.location ? capitalize(l.location) : "Ostalo";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(l);
+  }
+
+  const date = new Date().toLocaleDateString("hr-HR", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
+  let text =
+    `🏠 <b>Dnevni pregled nekretnina</b>\n` +
+    `📅 ${date}\n` +
+    `🔍 Ukupno novih: <b>${listings.length}</b>\n` +
+    `${"═".repeat(28)}\n\n`;
+
+  for (const [neighbourhood, items] of Object.entries(groups)) {
+    const priced = items.filter((l) => l.price != null);
+    const bestValue =
+      priced.sort((a, b) => {
+        if (a.size && b.size) return a.price / a.size - b.price / b.size;
+        return a.price - b.price;
+      })[0] || items[0];
+
+    const suffix = items.length === 1 ? "oglas" : items.length < 5 ? "oglasa" : "oglasa";
+    text += `📍 <b>${escapeHtml(neighbourhood)}</b> — ${items.length} ${suffix}\n`;
+
+    if (bestValue) {
+      const priceStr = bestValue.price
+        ? `${bestValue.price.toLocaleString("hr-HR")} €`
+        : "cijena na upit";
+      const sizeStr = bestValue.size ? `, ${bestValue.size} m²` : "";
+      text +=
+        `   ⭐ <a href="${bestValue.url}">${escapeHtml(bestValue.title)}</a>` +
+        ` — ${priceStr}${sizeStr}\n`;
+    }
+    text += "\n";
+  }
+
+  return sendMessage(text);
+}
+
+/**
  * Send a test/status message
  */
 export async function sendTestMessage() {

@@ -27,6 +27,7 @@ import { sendMessage } from "./telegram.js";
 import { applyFilters } from "./filters.js";
 import { notifyNewListings, sendTestMessage, sendMessage } from "./telegram.js";
 import { logger } from "./logger.js";
+import { notifyNewListings, sendDigest, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -168,6 +169,21 @@ async function runPipeline() {
       logger.error(`[db] Failed to mark listings as notified: ${err.message}`);
     }
     logger.info(`📨 Telegram notification sent!`);
+    if (config.notifyMode === "digest") {
+      logger.info(`[digest] Accumulated ${newListings.length} listing(s) — will send at digest hour`);
+    } else {
+      try {
+        await notifyNewListings(newListings);
+      } catch (err) {
+        console.error("[telegram] Failed to send notifications:", err.message);
+      }
+      try {
+        markNotified(newListings.map((l) => l.id));
+      } catch (err) {
+        console.error("[db] Failed to mark listings as notified:", err.message);
+      }
+      console.log(`📨 Telegram notification sent!`);
+    }
   } else {
     logger.info(`😴 Nema novih nekretnina danas.`);
   }
@@ -370,6 +386,26 @@ async function main() {
   }, {
     timezone: "Europe/Zagreb",
   });
+
+  if (config.notifyMode === "digest") {
+    cron.schedule(`0 ${config.digestHour} * * *`, async () => {
+      try {
+        const pending = getUnnotified();
+        if (pending.length > 0) {
+          await sendDigest(pending);
+          markNotified(pending.map((l) => l.id));
+          logger.info(`[digest] Sent digest for ${pending.length} listing(s)`);
+        } else {
+          logger.info("[digest] No pending listings for digest");
+        }
+      } catch (err) {
+        logger.error(`[digest] Error sending digest: ${err.message}`, err.stack);
+      }
+    }, {
+      timezone: "Europe/Zagreb",
+    });
+    logger.info(`📋 Digest mode: summary will be sent daily at ${config.digestHour}:00`);
+  }
 
   logger.info("🟢 Nekretnine Monitor is running. Waiting for next scheduled run...");
   logger.info("   Tip: use 'npm run scrape' to run immediately.");
