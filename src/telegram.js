@@ -423,7 +423,87 @@ export async function sendStatus() {
     `/clearfilter — revert to env defaults\n` +
     `/status — show this\n` +
     `/filter list — keyword filters</i>`
+ * Send monitor status: last run summary + pause state
+ */
+export async function sendStatus(logs, pauseUntil) {
+  const now = new Date();
+  const paused = pauseUntil && new Date(pauseUntil) > now;
+
+  let text = "📊 <b>Monitor Status</b>\n\n";
+
+  if (paused) {
+    const until = new Date(pauseUntil).toLocaleString("hr-HR");
+    text += `⏸ <b>Paused until:</b> ${until}\n\n`;
+  } else {
+    text += "▶️ <b>Active</b> — notifications enabled\n\n";
+  }
+
+  const lastRun = logs.length > 0 ? logs[0] : null;
+  if (lastRun) {
+    const date = new Date(lastRun.started_at).toLocaleString("hr-HR");
+    const durationMs = lastRun.finished_at
+      ? new Date(lastRun.finished_at) - new Date(lastRun.started_at)
+      : null;
+    const duration = durationMs != null ? `${Math.round(durationMs / 1000)}s` : "?";
+    text += `<b>Last run:</b> ${date} (${duration})\n`;
+    text += `Raw: ${lastRun.total_raw} → Filtered: ${lastRun.after_filters} → New: ${lastRun.new_listings}\n`;
+    text += `Scrapers: ${lastRun.scrapers_ok}✅ ${lastRun.scrapers_failed}❌`;
+  } else {
+    text += "<i>No runs recorded yet.</i>";
+  }
+
+  return sendMessage(text);
+}
+
+/**
+ * Send the active filter configuration (from env/config)
+ */
+export async function sendFiltersConfig(cfg) {
+  const type = cfg.filters.type === "all" ? "Stanovi + Kuće" : cfg.filters.type;
+  const locations = cfg.filters.locations.length > 0 ? cfg.filters.locations.join(", ") : "(sve)";
+  return sendMessage(
+    `⚙️ <b>Active Filters</b>\n\n` +
+    `🏙 City: ${cfg.filters.city}\n` +
+    `🏠 Type: ${type}\n` +
+    `💰 Price: ${cfg.filters.priceMin.toLocaleString()} – ${cfg.filters.priceMax.toLocaleString()} €\n` +
+    `📐 Size: ${cfg.filters.sizeMin} – ${cfg.filters.sizeMax} m²\n` +
+    `🛏️ Rooms: ${cfg.filters.roomsMin} – ${cfg.filters.roomsMax}\n` +
+    `📍 Locations: ${locations}\n` +
+    `⏰ Schedule: ${cfg.cron}`
   );
+}
+
+/**
+ * Send a list of recent listings
+ */
+export async function sendListings(listings) {
+  if (!listings.length) {
+    return sendMessage("📋 <b>Recent Listings</b>\n\n<i>No listings found.</i>");
+  }
+  let text = `📋 <b>Recent Listings</b> (${listings.length})\n\n`;
+  for (const l of listings) {
+    const item = formatListing(l) + "\n\n";
+    if (text.length + item.length > 4000) break;
+    text += item;
+  }
+  return sendMessage(text);
+}
+
+/**
+ * Confirm that notifications have been paused
+ */
+export async function sendPauseConfirmation(hours, until) {
+  const untilStr = new Date(until).toLocaleString("hr-HR");
+  return sendMessage(
+    `⏸ <b>Notifications paused for ${hours}h</b>\n\nUntil: ${untilStr}\n\nUse /pause off to resume.`
+  );
+}
+
+/**
+ * Confirm that pause has been cancelled
+ */
+export async function sendPauseOff() {
+  return sendMessage("▶️ <b>Notifications resumed.</b>");
 }
 
 /**

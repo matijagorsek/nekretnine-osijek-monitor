@@ -83,6 +83,9 @@ function migrate() {
     CREATE TABLE IF NOT EXISTS filter_overrides (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
     );
   `);
 
@@ -349,6 +352,29 @@ export function getRecentRunLogs(limit = 10) {
 export function getScraperHealth() {
   const db = getDb();
   return db.prepare("SELECT * FROM scraper_health ORDER BY key").all();
+ * Get or set a persistent setting value
+ */
+export function getSetting(key) {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row ? row.value : null;
+}
+
+export function setSetting(key, value) {
+  const db = getDb();
+  if (value === null || value === undefined) {
+    db.prepare("DELETE FROM settings WHERE key = ?").run(key);
+  } else {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, String(value));
+  }
+}
+
+/**
+ * Get the most recently seen listings
+ */
+export function getRecentListings(limit = 5) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM listings ORDER BY first_seen DESC LIMIT ?").all(limit);
 }
 
 /**
