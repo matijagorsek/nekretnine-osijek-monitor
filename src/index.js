@@ -6,11 +6,13 @@ if (missing.length) {
   process.exit(1);
 }
 
+import { createServer } from "http";
 import cron from "node-cron";
 import { mkdirSync } from "fs";
 import { config } from "./config.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, insertPriceHistory, getPriceHistory, isFavorite } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getRecentRunLogs, getScraperHealth } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
@@ -249,6 +251,37 @@ async function runPipeline() {
   logger.info(`✅ Pipeline done at ${new Date().toLocaleString("hr-HR")}`);
 }
 
+// ─── Health server ───
+
+function startHealthServer(port) {
+  const server = createServer((req, res) => {
+    if (req.url !== "/health" || req.method !== "GET") {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    const runs = getRecentRunLogs(1);
+    const lastRun = runs[0] || null;
+    const scrapers = getScraperHealth();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      status: "ok",
+      lastRun: lastRun ? {
+        startedAt: lastRun.started_at,
+        finishedAt: lastRun.finished_at,
+        scrapersOk: lastRun.scrapers_ok,
+        scrapersFailed: lastRun.scrapers_failed,
+        totalRaw: lastRun.total_raw,
+        newListings: lastRun.new_listings,
+      } : null,
+      scrapers,
+    }));
+  });
+  server.listen(port, () => {
+    logger.info(`🩺 Health server listening on port ${port}`);
+  });
+}
+
 // ─── Startup ───
 
 async function main() {
@@ -258,6 +291,9 @@ async function main() {
   // Initialize DB
   getDb();
   logger.info("💾 Database initialized");
+
+  const healthPort = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : null;
+  if (healthPort) startHealthServer(healthPort);
 
   // Check if --run-now flag
   const runNow = process.argv.includes("--run-now");
