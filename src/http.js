@@ -67,3 +67,21 @@ export async function politeSleep(minMs = 1000, maxMs = 3000) {
   const ms = minMs + Math.random() * (maxMs - minMs);
   await sleep(ms);
 }
+
+/**
+ * Retry an async function with exponential back-off.
+ * @param {Function} fn - async function to call
+ * @param {{ attempts?: number, baseDelay?: number }} options
+ */
+export async function retry(fn, { attempts = 3, baseDelay = 1000 } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < attempts) await sleep(baseDelay * Math.pow(2, attempt - 1));
+    }
+  }
+  throw lastErr;
+}
