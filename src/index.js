@@ -15,6 +15,7 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, insertPriceHistory, getPriceHistory, isFavorite } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getRecentRunLogs, getScraperHealth } from "./db.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getScraperHealth, getAllScraperHealth } from "./db.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, updateListingTracking, getListingById } from "./db.js";
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
@@ -72,6 +73,7 @@ import {
   sendStatus, sendFiltersConfig, sendListings,
   sendPauseConfirmation, sendPauseOff,
 } from "./telegram.js";
+import { notifyNewListings, notifyRelisted, sendTestMessage, sendMessage } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -192,6 +194,22 @@ async function runPipeline() {
 
     // Check DB for exact match
     if (listingExists(listing.id, fingerprint)) {
+      // Update tracking: last_seen and seen_count
+      const oldLastSeen = updateListingTracking(listing.id);
+
+      // Detect relisting: gap of >2 days means absent for >2 runs (daily cron)
+      if (oldLastSeen) {
+        const gapMs = Date.now() - new Date(oldLastSeen).getTime();
+        const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+        if (gapMs > TWO_DAYS_MS) {
+          const dbListing = getListingById(listing.id);
+          if (dbListing) {
+            await notifyRelisted({ ...listing, first_seen: dbListing.first_seen, seen_count: dbListing.seen_count });
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        }
+      }
+
       // Check for price drop on all existing listings
       if (listing.price != null) {
         const existing = getListingById(listing.id);
@@ -230,6 +248,9 @@ async function runPipeline() {
 
     // Save to DB
     try {
+      const now = new Date().toISOString();
+      listing.first_seen = now;
+      listing.last_seen = now;
       insertListing(listing);
       if (listing.price != null) {
         insertPriceHistory(listing.id, listing.price);
