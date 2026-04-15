@@ -282,6 +282,23 @@ function escapeHtml(text) {
 }
 
 /**
+ * Notify user that a user-defined trigger matched new listings.
+ */
+export async function notifyTriggerMatch(triggerName, listings) {
+  const header = `🎯 <b>Trigger: ${escapeHtml(triggerName)}</b>\n📅 ${new Date().toLocaleDateString("hr-HR")}\n🔍 Pronađeno: <b>${listings.length}</b> novih oglasa\n${"═".repeat(28)}`;
+  await sendMessage(header);
+  let success = 0;
+  for (const listing of listings) {
+    const text = formatListing(listing);
+    const keyboard = [[{ text: "⭐ Spremi u favorite", callback_data: `fav:${listing.id}` }]];
+    const ok = await sendMessageWithKeyboard(text, keyboard);
+    if (ok) success++;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  logger.info(`[telegram] Trigger "${triggerName}": sent ${success}/${listings.length} listing messages`);
+}
+
+/**
  * Send the current user-defined filter list
  */
 export async function sendFilterStatus(includeKeywords, excludeKeywords) {
