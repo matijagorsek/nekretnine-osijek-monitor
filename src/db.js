@@ -111,41 +111,44 @@ function migrate() {
   if (!listingCols.includes('seen_count')) {
     db.exec("ALTER TABLE listings ADD COLUMN seen_count INTEGER DEFAULT 1");
   }
+  try {
+    db.exec("ALTER TABLE scraper_health ADD COLUMN last_listing_count INTEGER DEFAULT 0");
+  } catch (_) {}
 }
 
 /**
  * Record a scraper selector failure. Returns the new consecutive failure count.
  */
-export function recordScraperFailure(key) {
+export function recordScraperFailure(key, listingCount = 0) {
   const db = getDb();
   const now = new Date().toISOString();
   const existing = db.prepare("SELECT * FROM scraper_health WHERE key = ?").get(key);
   if (!existing) {
     db.prepare(
-      "INSERT INTO scraper_health (key, consecutive_failures, last_failure, first_failure) VALUES (?, 1, ?, ?)"
-    ).run(key, now, now);
+      "INSERT INTO scraper_health (key, consecutive_failures, last_failure, first_failure, last_listing_count) VALUES (?, 1, ?, ?, ?)"
+    ).run(key, now, now, listingCount);
     return 1;
   }
   const newCount = existing.consecutive_failures + 1;
   db.prepare(
-    "UPDATE scraper_health SET consecutive_failures = ?, last_failure = ?, first_failure = COALESCE(first_failure, ?) WHERE key = ?"
-  ).run(newCount, now, now, key);
+    "UPDATE scraper_health SET consecutive_failures = ?, last_failure = ?, first_failure = COALESCE(first_failure, ?), last_listing_count = ? WHERE key = ?"
+  ).run(newCount, now, now, listingCount, key);
   return newCount;
 }
 
 /**
  * Record a scraper success. Returns true if it was previously failing (recovered).
  */
-export function recordScraperSuccess(key) {
+export function recordScraperSuccess(key, listingCount = 0) {
   const db = getDb();
   const now = new Date().toISOString();
   const existing = db.prepare("SELECT consecutive_failures FROM scraper_health WHERE key = ?").get(key);
   const wasFailing = !!(existing && existing.consecutive_failures > 0);
   db.prepare(
-    `INSERT INTO scraper_health (key, consecutive_failures, last_success, first_failure)
-     VALUES (?, 0, ?, NULL)
-     ON CONFLICT(key) DO UPDATE SET consecutive_failures = 0, last_success = ?, first_failure = NULL`
-  ).run(key, now, now);
+    `INSERT INTO scraper_health (key, consecutive_failures, last_success, first_failure, last_listing_count)
+     VALUES (?, 0, ?, NULL, ?)
+     ON CONFLICT(key) DO UPDATE SET consecutive_failures = 0, last_success = ?, first_failure = NULL, last_listing_count = ?`
+  ).run(key, now, now, listingCount, now, listingCount);
   return wasFailing;
 }
 
@@ -161,6 +164,9 @@ export function getScraperHealth(key) {
  * Get health records for all scrapers
  */
 export function getAllScraperHealth() {
+ * Get all scraper health rows
+ */
+export function getScraperHealth() {
   const db = getDb();
   return db.prepare("SELECT * FROM scraper_health ORDER BY key").all();
 }
