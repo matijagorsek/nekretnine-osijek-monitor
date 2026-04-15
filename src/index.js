@@ -14,6 +14,11 @@ import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
 import { logger } from "./logger.js";
+import { logger } from "./logger.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites, addUserFilter, removeUserFilter, getUserFilters, getRecentRunLogs, recordRunLog } from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, sendTestMessage, sendMessage, notifyPriceDrop, notifySimilarListing, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./telegram.js";
 
 // Scrapers
 import * as njuskalo from "./scrapers/njuskalo.js";
@@ -54,12 +59,19 @@ async function runPipeline() {
       if (listings.length === 0 && containerCount === 0) {
         await sendMessage(`⚠️ ${scraper.name}: 0 container elements — possible selector failure`);
         console.warn(`[${scraper.name}] 0 containers found — selector may be broken`);
+        recordScraperFailure(scraper.name);
+        scrapersFailed++;
+        scraperErrors.push(`${scraper.name}: 0 containers`);
+      } else {
+        recordScraperSuccess(scraper.name);
+        scrapersOk++;
       }
       allListings.push(...listings);
       scrapersOk++;
     } catch (err) {
       console.error(`❌ ${scraper.name} error:`, err.message);
       await sendMessage(`❌ ${scraper.name} scrape failed: ${err.message}`);
+      recordScraperFailure(scraper.name);
       scrapersFailed++;
       scraperErrors.push(`${scraper.name}: ${err.message}`);
     }
