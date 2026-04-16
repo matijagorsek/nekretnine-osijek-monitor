@@ -29,6 +29,10 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, sendFindResults, answerCallbackQuery, startPolling } from "./telegram.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs, updateLastSeen, tombstoneExpiredListings, getMarketVelocityStats } from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling, sendMarketVelocityDigest } from "./telegram.js";
 import { logger } from "./logger.js";
 import { logger } from "./logger.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites, addUserFilter, removeUserFilter, getUserFilters, getRecentRunLogs, recordRunLog } from "./db.js";
@@ -457,6 +461,22 @@ async function runPipeline() {
     }
   }
 
+  // Update last_seen_at for all scraped listings and tombstone those that disappeared
+  const allScrapedIds = allListings.map(l => l.id);
+  updateLastSeen(allScrapedIds);
+  const successfulSources = [...new Set(allListings.map(l => l.source))];
+  const tombstoned = tombstoneExpiredListings(allScrapedIds, successfulSources);
+  if (tombstoned > 0) logger.info(`🪦 Tombstoned ${tombstoned} expired listings (status=sold)`);
+
+  // Weekly digest: send market velocity stats every Monday
+  if (new Date().getDay() === 1) {
+    try {
+      await sendMarketVelocityDigest(getMarketVelocityStats());
+    } catch (err) {
+      logger.error(`[digest] Failed to send market velocity digest: ${err.message}`);
+    }
+  }
+
   const finishedAt = new Date().toISOString();
   recordRunLog({
     startedAt,
@@ -708,6 +728,8 @@ async function main() {
           ? [[{ text: "▶️ Dalje", callback_data: `find:${sessionId}:1` }]]
           : [];
         await sendFindResults(rows, 0, total, keyboard);
+      if (text === "/velocity") {
+        await sendMarketVelocityDigest(getMarketVelocityStats());
         return;
       }
 
