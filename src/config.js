@@ -85,6 +85,10 @@ export const config = {
   quietHours: {
     start: process.env.QUIET_HOURS_START || null,  // e.g. "22:00"
     end: process.env.QUIET_HOURS_END || null,       // e.g. "07:00"
+  mortgage: {
+    downPct: Number(process.env.MORTGAGE_DOWN_PCT) || 20,
+    rateYearly: Number(process.env.MORTGAGE_RATE) || 3.5,
+    termYears: Number(process.env.MORTGAGE_TERM_YEARS) || 30,
   },
 
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,

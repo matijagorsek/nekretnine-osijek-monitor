@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { getAllFilterOverrides } from "./db.js";
+import { calcMonthlyPayment } from "./mortgage.js";
 
 const API_BASE = `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -256,11 +257,14 @@ function formatListing(l) {
     const days = Math.floor((Date.now() - new Date(l.first_seen).getTime()) / (1000 * 60 * 60 * 24));
     daysOnMarket = days === 0 ? "📅 Danas na tržištu" : `📅 Na tržištu: <b>${days} ${days === 1 ? "dan" : "dana"}</b>`;
   }
+  const monthly = calcMonthlyPayment(l.price, config.mortgage);
+  const mortgageLine = monthly ? `🏦 Rata ≈ <b>${monthly.toLocaleString("hr-HR")} €</b>/mj` : null;
 
   const lines = [
     `${icon} <b>${escapeHtml(l.title)}</b>`,
     price,
   ];
+  if (mortgageLine) lines.push(mortgageLine);
   if (details) lines.push(details);
   if (amenitiesLine) lines.push(amenitiesLine);
   if (orientationLine) lines.push(orientationLine);
