@@ -36,7 +36,7 @@ export async function sendMessage(text, parseMode = "HTML") {
 /**
  * Send a message with an inline keyboard
  */
-async function sendMessageWithKeyboard(text, inlineKeyboard, parseMode = "HTML") {
+export async function sendMessageWithKeyboard(text, inlineKeyboard, parseMode = "HTML") {
   try {
     const resp = await fetch(`${API_BASE}/sendMessage`, {
       method: "POST",
@@ -316,6 +316,20 @@ export async function notifyTriggerMatch(triggerName, listings) {
     await new Promise((r) => setTimeout(r, 100));
   }
   logger.info(`[telegram] Trigger "${triggerName}": sent ${success}/${listings.length} listing messages`);
+ * Send paginated /find results with optional Next/Prev inline keyboard.
+ */
+export async function sendFindResults(listings, page, total, keyboard) {
+  const totalPages = Math.ceil(total / 5) || 1;
+  if (!listings.length) {
+    return sendMessage("🔍 <b>Pretraga</b>\n\nNema rezultata za zadane kriterije.");
+  }
+  const header = `🔍 <b>Rezultati pretrage</b>  (str. ${page + 1}/${totalPages}, ukupno: ${total})\n${"═".repeat(28)}`;
+  const body = listings.map((l) => formatListing(l)).join("\n\n");
+  const text = `${header}\n\n${body}`;
+  if (keyboard && keyboard.length) {
+    return sendMessageWithKeyboard(text, keyboard);
+  }
+  return sendMessage(text);
 }
 
 /**

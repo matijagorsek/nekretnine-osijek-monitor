@@ -25,6 +25,10 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./notifier.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs, searchListings } from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, sendFindResults, answerCallbackQuery, startPolling } from "./telegram.js";
 import { logger } from "./logger.js";
 import { logger } from "./logger.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites, addUserFilter, removeUserFilter, getUserFilters, getRecentRunLogs, recordRunLog } from "./db.js";
@@ -108,6 +112,26 @@ function isCircuitOpen(scraperName) {
   const health = getScraperHealth(scraperName);
   if (!health || health.consecutive_failures < CIRCUIT_OPEN_THRESHOLD) return false;
   return Date.now() - new Date(health.last_failure).getTime() < CIRCUIT_COOLDOWN_MS;
+// ─── /find session store ───
+
+const findSessions = new Map();
+let _findSessionCounter = 0;
+
+function parseFindArgs(argStr) {
+  const tokens = argStr.trim().split(/\s+/).filter(Boolean);
+  const params = { keywords: [], priceMin: null, priceMax: null, rooms: null };
+  for (const token of tokens) {
+    if (/^max:\d+$/i.test(token)) {
+      params.priceMax = parseInt(token.slice(4), 10);
+    } else if (/^min:\d+$/i.test(token)) {
+      params.priceMin = parseInt(token.slice(4), 10);
+    } else if (/^(\d+)sobe?$/i.test(token)) {
+      params.rooms = parseInt(token, 10);
+    } else if (token) {
+      params.keywords.push(token.toLowerCase());
+    }
+  }
+  return params;
 }
 
 // ─── Main scraping pipeline ───
@@ -558,6 +582,23 @@ async function main() {
         removeFavorite(listingId);
         await answerCallbackQuery(id, "💔 Uklonjeno iz favorita!");
         logger.info(`[favorites] Removed: ${listingId}`);
+      } else if (data.startsWith("find:")) {
+        const parts = data.split(":");
+        const sessionId = parseInt(parts[1], 10);
+        const page = parseInt(parts[2], 10);
+        const params = findSessions.get(sessionId);
+        if (!params) {
+          await answerCallbackQuery(id, "Sesija je istekla. Pokrenite /find ponovo.");
+          return;
+        }
+        const PAGE_SIZE = 5;
+        const { rows, total } = searchListings(params, PAGE_SIZE, page * PAGE_SIZE);
+        const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+        const navRow = [];
+        if (page > 0) navRow.push({ text: "◀️ Nazad", callback_data: `find:${sessionId}:${page - 1}` });
+        if (page < totalPages - 1) navRow.push({ text: "▶️ Dalje", callback_data: `find:${sessionId}:${page + 1}` });
+        await answerCallbackQuery(id, "");
+        await sendFindResults(rows, page, total, navRow.length ? [navRow] : []);
       }
     },
     async (message) => {
@@ -655,6 +696,18 @@ async function main() {
         } else {
           await sendMessage(`⚠️ Sintaksa: /snooze 4h ili /snooze 30m`);
         }
+      if (text.startsWith("/find")) {
+        const argStr = text.slice(5).trim();
+        const params = parseFindArgs(argStr);
+        const sessionId = ++_findSessionCounter;
+        findSessions.set(sessionId, params);
+        const PAGE_SIZE = 5;
+        const { rows, total } = searchListings(params, PAGE_SIZE, 0);
+        const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+        const keyboard = totalPages > 1
+          ? [[{ text: "▶️ Dalje", callback_data: `find:${sessionId}:1` }]]
+          : [];
+        await sendFindResults(rows, 0, total, keyboard);
         return;
       }
 
