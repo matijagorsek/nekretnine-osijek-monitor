@@ -3,6 +3,7 @@ import { createTransport } from "nodemailer";
 import * as telegram from "./telegram.js";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
+import { getSnoozedUntil } from "./db.js";
 
 // ─── Email helpers ───
 
@@ -61,12 +62,44 @@ async function sendWebhookNotification(event, payload) {
   }
 }
 
+// ─── Quiet hours / snooze guard ───
+
+function isSuppressed() {
+  const snoozedUntil = getSnoozedUntil();
+  if (snoozedUntil && new Date() < new Date(snoozedUntil)) {
+    logger.info(`[notifier] Suppressed — snoozed until ${snoozedUntil}`);
+    return true;
+  }
+
+  const { start, end } = config.quietHours;
+  if (!start || !end) return false;
+
+  const now = new Date();
+  const [startH, startM] = start.split(":").map(Number);
+  const [endH, endM] = end.split(":").map(Number);
+  const current = now.getHours() * 60 + now.getMinutes();
+  const startMin = startH * 60 + startM;
+  const endMin = endH * 60 + endM;
+  const inQuiet = startMin > endMin
+    ? current >= startMin || current < endMin   // overnight window e.g. 22:00–07:00
+    : current >= startMin && current < endMin;  // same-day window
+
+  if (inQuiet) {
+    logger.info(`[notifier] Suppressed — quiet hours (${start}–${end})`);
+    return true;
+  }
+
+  return false;
+}
+
 // ─── Dispatcher ───
 
 const channels = config.channels;
 
 export async function notifyNewListings(listings, profileName = null) {
   const profileLabel = profileName ? ` — ${profileName}` : "";
+export async function notifyNewListings(listings) {
+  if (isSuppressed()) return;
   const tasks = [];
   if (channels.includes("telegram")) tasks.push(telegram.notifyNewListings(listings, profileName));
   if (channels.includes("email")) {
@@ -82,6 +115,8 @@ export async function notifyNewListings(listings, profileName = null) {
 }
 
 export async function notifyPriceDrop(listing, oldPrice, isFav = false, priceHistory = []) {
+export async function notifyPriceDrop(listing, oldPrice, isFav = false) {
+  if (isSuppressed()) return;
   const tasks = [];
   if (channels.includes("telegram")) tasks.push(telegram.notifyPriceDrop(listing, oldPrice, isFav, priceHistory));
   if (channels.includes("email")) {
@@ -101,6 +136,7 @@ export async function notifyPriceDrop(listing, oldPrice, isFav = false, priceHis
 }
 
 export async function notifySimilarListing(newListing, favListing) {
+  if (isSuppressed()) return;
   const tasks = [];
   if (channels.includes("telegram")) tasks.push(telegram.notifySimilarListing(newListing, favListing));
   if (channels.includes("email")) {
@@ -147,4 +183,4 @@ export async function sendTestMessage() {
 }
 
 // Telegram-only pass-throughs (interactive bot features)
-export { sendStats, sendFilterStatus, startPolling, answerCallbackQuery } from "./telegram.js";
+export { sendMessage, sendStats, sendFilterStatus, startPolling, answerCallbackQuery } from "./telegram.js";
