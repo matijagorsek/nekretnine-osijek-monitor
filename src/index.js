@@ -21,6 +21,10 @@ import { getDb, listingExists, insertListing, markNotified, getUnnotified, recor
 import { generateFingerprint, isDuplicate } from "./dedupe.js";
 import { applyFilters, applySort } from "./filters.js";
 import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, sendWeeklyDigest, answerCallbackQuery, startPolling } from "./telegram.js";
+import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, isFavorite, getFavorites, addFavorite, removeFavorite, addUserFilter, removeUserFilter, getUserFilters, recordRunLog, getRecentRunLogs, setSnoozedUntil } from "./db.js";
+import { generateFingerprint, isDuplicate } from "./dedupe.js";
+import { applyFilters, applySort } from "./filters.js";
+import { notifyNewListings, notifyPriceDrop, notifySimilarListing, sendTestMessage, sendMessage, sendStats, sendFilterStatus, answerCallbackQuery, startPolling } from "./notifier.js";
 import { logger } from "./logger.js";
 import { logger } from "./logger.js";
 import { getDb, listingExists, insertListing, markNotified, getUnnotified, recordScraperFailure, recordScraperSuccess, getListingById, updateListingPrice, addFavorite, removeFavorite, isFavorite, getFavorites, addUserFilter, removeUserFilter, getUserFilters, getRecentRunLogs, recordRunLog } from "./db.js";
@@ -637,6 +641,20 @@ async function main() {
       if (text === "/health") {
         const rows = getScraperHealth();
         await sendHealth(rows);
+      if (text.startsWith("/snooze")) {
+        const arg = text.trim().split(/\s+/)[1];
+        const match = arg ? arg.match(/^(\d+)([hm])$/) : null;
+        if (match) {
+          const val = parseInt(match[1], 10);
+          const ms = match[2] === "h" ? val * 3600000 : val * 60000;
+          const until = new Date(Date.now() + ms).toISOString();
+          setSnoozedUntil(until);
+          const untilLocal = new Date(until).toLocaleString("hr-HR");
+          await sendMessage(`😴 Notifikacije prigušene do ${untilLocal}`);
+          logger.info(`[snooze] Snoozed until ${until}`);
+        } else {
+          await sendMessage(`⚠️ Sintaksa: /snooze 4h ili /snooze 30m`);
+        }
         return;
       }
 

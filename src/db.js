@@ -84,6 +84,7 @@ function migrate() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     CREATE TABLE IF NOT EXISTS settings (
+    CREATE TABLE IF NOT EXISTS app_config (
       key TEXT PRIMARY KEY,
       value TEXT
     );
@@ -438,6 +439,20 @@ export function getWeeklyDigestStats() {
   `).all();
 
   return { ...overall, bySource, byLocation };
+ * Get the snoozed_until ISO timestamp (or null if not set / expired)
+ */
+export function getSnoozedUntil() {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM app_config WHERE key = 'snoozed_until'").get();
+  return row ? row.value : null;
+}
+
+/**
+ * Persist a snoozed_until ISO timestamp
+ */
+export function setSnoozedUntil(isoString) {
+  const db = getDb();
+  db.prepare("INSERT OR REPLACE INTO app_config (key, value) VALUES ('snoozed_until', ?)").run(isoString);
 }
 
 /**

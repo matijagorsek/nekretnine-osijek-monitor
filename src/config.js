@@ -82,6 +82,11 @@ export const config = {
       : [],
   },
 
+  quietHours: {
+    start: process.env.QUIET_HOURS_START || null,  // e.g. "22:00"
+    end: process.env.QUIET_HOURS_END || null,       // e.g. "07:00"
+  },
+
   dedupeThreshold: Number(process.env.DEDUPE_THRESHOLD) || 0.85,
 
   alertThresholds: {
