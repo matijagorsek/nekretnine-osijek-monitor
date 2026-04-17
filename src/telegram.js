@@ -537,6 +537,19 @@ export async function sendFiltersConfig(cfg) {
     `🛏️ Rooms: ${cfg.filters.roomsMin} – ${cfg.filters.roomsMax}\n` +
     `📍 Locations: ${locations}\n` +
     `⏰ Schedule: ${cfg.cron}`
+ * Send weekly market velocity digest: avg days-on-market per neighbourhood.
+ */
+export async function sendMarketVelocityDigest(stats) {
+  if (!stats.length) {
+    return sendMessage("📊 <b>Brzina tržišta</b>\n\nNema dovoljno podataka za prikaz.");
+  }
+  const lines = stats.map(s =>
+    `📍 <b>${capitalize(s.location)}</b>: ${s.avg_days} dana avg (${s.sold_count} prodano)`
+  );
+  return sendMessage(
+    `📊 <b>Brzina tržišta — prodaja po kvartovima</b>\n\n` +
+    lines.join("\n") +
+    `\n\n<i>Prosjek dana na tržištu do nestanka oglasa.</i>`
   );
 }
 

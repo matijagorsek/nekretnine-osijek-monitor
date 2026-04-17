@@ -94,6 +94,9 @@ function migrate() {
   for (const sql of [
     "ALTER TABLE listings ADD COLUMN amenities TEXT",
     "ALTER TABLE listings ADD COLUMN orientation TEXT",
+    "ALTER TABLE listings ADD COLUMN last_seen_at TEXT",
+    "ALTER TABLE listings ADD COLUMN status TEXT DEFAULT 'active'",
+    "ALTER TABLE listings ADD COLUMN days_on_market REAL",
   ]) {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
   // Migrate existing databases that don't have image_url yet
@@ -204,6 +207,8 @@ export function insertListing(listing) {
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @city, @description, @fingerprint)`
     `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint, first_seen, last_seen)
      VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @first_seen, @last_seen)`
+    `INSERT OR IGNORE INTO listings (id, source, url, title, price, size, rooms, location, type, description, fingerprint, amenities, orientation, last_seen_at, status)
+     VALUES (@id, @source, @url, @title, @price, @size, @rooms, @location, @type, @description, @fingerprint, @amenities, @orientation, datetime('now'), 'active')`
   ).run(listing);
 }
 
@@ -491,4 +496,61 @@ export function searchListings({ keywords = [], priceMin, priceMax, rooms } = {}
   const rows = db.prepare(`SELECT * FROM listings ${where} ORDER BY first_seen DESC LIMIT ? OFFSET ?`).all(...bindings, limit, offset);
   const { cnt } = db.prepare(`SELECT COUNT(*) as cnt FROM listings ${where}`).get(...bindings);
   return { rows, total: cnt };
+ * Update last_seen_at to now for all given listing ids
+ */
+export function updateLastSeen(ids) {
+  if (!ids.length) return;
+  const db = getDb();
+  const now = new Date().toISOString();
+  const stmt = db.prepare("UPDATE listings SET last_seen_at = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    for (const id of ids) stmt.run(now, id);
+  });
+  tx();
+}
+
+/**
+ * Mark active listings from successful sources that were not seen in the current run as sold.
+ * Records days_on_market = days between first_seen and last_seen_at.
+ * Returns the number of tombstoned listings.
+ */
+export function tombstoneExpiredListings(seenIds, successfulSources) {
+  if (!successfulSources.length) return 0;
+  const db = getDb();
+  const seenSet = new Set(seenIds);
+  const placeholders = successfulSources.map(() => "?").join(",");
+  const active = db.prepare(
+    `SELECT id, first_seen, last_seen_at FROM listings WHERE (status = 'active' OR status IS NULL) AND source IN (${placeholders})`
+  ).all(...successfulSources);
+  const toTombstone = active.filter(l => !seenSet.has(l.id));
+  if (!toTombstone.length) return 0;
+  const stmt = db.prepare(
+    "UPDATE listings SET status = 'sold', days_on_market = ? WHERE id = ?"
+  );
+  const tx = db.transaction(() => {
+    for (const l of toTombstone) {
+      const lastSeen = l.last_seen_at || l.first_seen;
+      const dom = lastSeen
+        ? Math.round((new Date(lastSeen) - new Date(l.first_seen)) / (1000 * 60 * 60 * 24))
+        : 0;
+      stmt.run(dom, l.id);
+    }
+  });
+  tx();
+  return toTombstone.length;
+}
+
+/**
+ * Return average days-on-market per neighbourhood for sold listings.
+ * Ordered by fastest-selling first.
+ */
+export function getMarketVelocityStats() {
+  const db = getDb();
+  return db.prepare(
+    `SELECT location, COUNT(*) AS sold_count, ROUND(AVG(days_on_market), 1) AS avg_days
+     FROM listings
+     WHERE status = 'sold' AND days_on_market IS NOT NULL AND location IS NOT NULL
+     GROUP BY location
+     ORDER BY avg_days ASC`
+  ).all();
 }
