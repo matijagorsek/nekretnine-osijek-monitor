@@ -468,3 +468,27 @@ export function getFavorites() {
     )
     .all();
 }
+
+/**
+ * Search the listings archive by keyword, price, and rooms filters.
+ * Returns { rows, total } for pagination.
+ */
+export function searchListings({ keywords = [], priceMin, priceMax, rooms } = {}, limit = 5, offset = 0) {
+  const db = getDb();
+  const conditions = [];
+  const bindings = [];
+
+  if (priceMin != null) { conditions.push("price >= ?"); bindings.push(priceMin); }
+  if (priceMax != null) { conditions.push("price <= ?"); bindings.push(priceMax); }
+  if (rooms != null) { conditions.push("rooms = ?"); bindings.push(rooms); }
+
+  for (const kw of keywords) {
+    conditions.push("(LOWER(title) LIKE ? OR LOWER(location) LIKE ?)");
+    bindings.push(`%${kw}%`, `%${kw}%`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = db.prepare(`SELECT * FROM listings ${where} ORDER BY first_seen DESC LIMIT ? OFFSET ?`).all(...bindings, limit, offset);
+  const { cnt } = db.prepare(`SELECT COUNT(*) as cnt FROM listings ${where}`).get(...bindings);
+  return { rows, total: cnt };
+}
